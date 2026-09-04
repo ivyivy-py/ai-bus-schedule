@@ -1,45 +1,60 @@
 import React, { useEffect, useRef } from 'react';
 import L from 'leaflet';
-import { BusStop } from '../types';
-import { Locate, MapPin, Navigation } from 'lucide-react';
+import { BusStop, BusRoute } from '../types';
+import { Locate, Compass, Route as RouteIcon, X, Layers } from 'lucide-react';
+import { SINGAPORE_BUS_STOPS, getBusStopByCode } from '../data/singaporeBusStops';
 
 interface BusStopMapProps {
   userLocation: { latitude: number; longitude: number } | null;
-  nearbyStops: BusStop[];
+  allStops: BusStop[];
   selectedStop: BusStop | null;
   onSelectStop: (stop: BusStop) => void;
+  selectedRoute: BusRoute | null;
+  onClearRoute: () => void;
   onRequestUserLocation: () => void;
   locatingUser: boolean;
+  highlightRoadName: string | null;
+  onClearHighlightRoad: () => void;
 }
 
 export const BusStopMap: React.FC<BusStopMapProps> = ({
   userLocation,
-  nearbyStops,
+  allStops,
   selectedStop,
   onSelectStop,
+  selectedRoute,
+  onClearRoute,
   onRequestUserLocation,
   locatingUser,
+  highlightRoadName,
+  onClearHighlightRoad,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
-  const markersLayerRef = useRef<L.LayerGroup | null>(null);
+  const stopsLayerRef = useRef<L.LayerGroup | null>(null);
+  const routeLayerRef = useRef<L.LayerGroup | null>(null);
   const userMarkerRef = useRef<L.Marker | null>(null);
 
   // Initialize Leaflet map
   useEffect(() => {
     if (!mapContainerRef.current || mapInstanceRef.current) return;
 
-    // Default center: Singapore center or selected stop
+    // Default center on Singapore
     const initialLat = selectedStop?.latitude || userLocation?.latitude || 1.3521;
     const initialLng = selectedStop?.longitude || userLocation?.longitude || 103.8198;
 
     const map = L.map(mapContainerRef.current, {
       center: [initialLat, initialLng],
-      zoom: 16,
+      zoom: 14,
       zoomControl: false,
+      maxBounds: [
+        [1.15, 103.55],
+        [1.5, 104.1],
+      ],
+      minZoom: 11,
     });
 
-    // High quality OpenStreetMap tiles with dark/modern cartography styling
+    // High quality modern cartography tile layer
     L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
       attribution:
         '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/">CARTO</a>',
@@ -47,11 +62,15 @@ export const BusStopMap: React.FC<BusStopMapProps> = ({
       subdomains: 'abcd',
     }).addTo(map);
 
-    // Add zoom control in top right
+    // Zoom controls in top right
     L.control.zoom({ position: 'topright' }).addTo(map);
 
-    const markersLayer = L.layerGroup().addTo(map);
-    markersLayerRef.current = markersLayer;
+    const routeLayer = L.layerGroup().addTo(map);
+    routeLayerRef.current = routeLayer;
+
+    const stopsLayer = L.layerGroup().addTo(map);
+    stopsLayerRef.current = stopsLayer;
+
     mapInstanceRef.current = map;
 
     return () => {
@@ -70,9 +89,9 @@ export const BusStopMap: React.FC<BusStopMapProps> = ({
         className: 'custom-user-pin',
         html: `
           <div class="relative flex items-center justify-center w-8 h-8">
-            <span class="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60 animate-ping"></span>
-            <span class="relative inline-flex items-center justify-center rounded-full h-5 w-5 bg-emerald-500 border-2 border-white shadow-lg text-white font-bold text-[9px]">
-              ME
+            <span class="absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75 animate-ping"></span>
+            <span class="relative inline-flex items-center justify-center rounded-full h-5 w-5 bg-sky-500 border-2 border-white shadow-lg text-white font-bold text-[8px]">
+              GPS
             </span>
           </div>
         `,
@@ -88,7 +107,7 @@ export const BusStopMap: React.FC<BusStopMapProps> = ({
           zIndexOffset: 1000,
         })
           .addTo(map)
-          .bindTooltip('Your Current Location', { permanent: false, direction: 'top' });
+          .bindTooltip('Your Current Location (GPS)', { permanent: false, direction: 'top' });
       }
     } else if (userMarkerRef.current) {
       userMarkerRef.current.remove();
@@ -96,68 +115,93 @@ export const BusStopMap: React.FC<BusStopMapProps> = ({
     }
   }, [userLocation]);
 
-  // Update bus stop markers whenever nearbyStops or selectedStop changes
+  // Render bus stop markers (busrouter.sg styled badges)
   useEffect(() => {
     const map = mapInstanceRef.current;
-    const markersLayer = markersLayerRef.current;
-    if (!map || !markersLayer) return;
+    const stopsLayer = stopsLayerRef.current;
+    if (!map || !stopsLayer) return;
 
-    markersLayer.clearLayers();
+    stopsLayer.clearLayers();
 
-    nearbyStops.forEach((stop) => {
+    // Use either allStops or fallback to SINGAPORE_BUS_STOPS
+    const stopsToRender = allStops.length > 0 ? allStops : SINGAPORE_BUS_STOPS;
+
+    stopsToRender.forEach((stop) => {
       const isSelected = selectedStop?.code === stop.code;
+      const isRoadHighlighted =
+        highlightRoadName &&
+        stop.roadName.toLowerCase().includes(highlightRoadName.toLowerCase());
+      const isRouteStop = selectedRoute?.stops.includes(stop.code);
+
+      // Distinctive busrouter.sg style marker:
+      // Red pill badge with white text, or green if selected, amber if route stop
+      const badgeBg = isSelected
+        ? 'bg-emerald-600 text-white border-white ring-4 ring-emerald-400/50 shadow-emerald-500/50'
+        : isRouteStop
+        ? 'bg-sky-600 text-white border-white ring-2 ring-sky-400 shadow-sky-500/40'
+        : isRoadHighlighted
+        ? 'bg-amber-600 text-white border-white ring-2 ring-amber-400'
+        : 'bg-rose-600 hover:bg-rose-500 text-white border-white/90 shadow-md';
 
       const stopIcon = L.divIcon({
         className: 'custom-bus-stop-pin',
         html: `
-          <div class="cursor-pointer transition-transform hover:scale-110 flex flex-col items-center group">
-            <div class="px-2 py-1 rounded-md shadow-md text-xs font-bold font-mono tracking-tight flex items-center gap-1 border ${
-              isSelected
-                ? 'bg-emerald-600 text-white border-emerald-400 ring-2 ring-emerald-300 ring-offset-1 shadow-emerald-500/40'
-                : 'bg-slate-900/90 text-slate-100 border-slate-700 hover:border-emerald-400 hover:text-emerald-300'
-            }">
-              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M8 6v6"/>
-                <path d="M16 6v6"/>
-                <rect width="16" height="16" x="4" y="3" rx="2"/>
-                <path d="M4 11h16"/>
-                <path d="M8 19v2"/>
-                <path d="M16 19v2"/>
-              </svg>
+          <div class="cursor-pointer transition-all duration-200 hover:scale-125 flex flex-col items-center group ${
+            isSelected ? 'scale-115 z-50' : 'z-20'
+          }">
+            <div class="px-1.5 py-0.5 rounded-full shadow-lg text-[10px] font-mono font-bold tracking-tight flex items-center gap-1 border ${badgeBg}">
+              <span class="w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-white animate-pulse' : 'bg-rose-200'}"></span>
               <span>${stop.code}</span>
             </div>
-            <div class="w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent ${
-              isSelected ? 'border-t-[5px] border-t-emerald-600' : 'border-t-[5px] border-t-slate-900'
+            <div class="w-0 h-0 border-l-[3px] border-l-transparent border-r-[3px] border-r-transparent border-t-[4px] ${
+              isSelected
+                ? 'border-t-emerald-600'
+                : isRouteStop
+                ? 'border-t-sky-600'
+                : isRoadHighlighted
+                ? 'border-t-amber-600'
+                : 'border-t-rose-600'
             }"></div>
           </div>
         `,
-        iconSize: [60, 30],
-        iconAnchor: [30, 28],
+        iconSize: [46, 24],
+        iconAnchor: [23, 22],
       });
 
       const marker = L.marker([stop.latitude, stop.longitude], {
         icon: stopIcon,
-        zIndexOffset: isSelected ? 500 : 100,
+        zIndexOffset: isSelected ? 800 : isRouteStop ? 600 : isRoadHighlighted ? 500 : 100,
       });
 
       marker.on('click', () => {
         onSelectStop(stop);
       });
 
-      // Bind popup with stop details
+      // Interactive Popup
       marker.bindPopup(`
-        <div class="p-1 text-slate-900 text-sm font-sans">
-          <div class="font-bold text-base text-slate-950">${stop.description}</div>
-          <div class="text-xs text-slate-600 mb-1">${stop.roadName} &bull; Code: <strong>${stop.code}</strong></div>
-          ${stop.distance ? `<div class="text-xs text-emerald-700 font-semibold mb-2">📍 ${stop.distance < 1000 ? `${stop.distance}m away` : `${(stop.distance / 1000).toFixed(1)}km away`}</div>` : ''}
-          <button id="popup-select-${stop.code}" class="w-full mt-1 px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-semibold cursor-pointer">
+        <div class="p-1 text-slate-900 font-sans min-w-[180px]">
+          <div class="flex items-center gap-1.5 mb-1">
+            <span class="px-1.5 py-0.5 rounded bg-rose-600 text-white font-mono font-bold text-[10px]">${stop.code}</span>
+            <span class="text-xs font-semibold text-slate-600">${stop.roadName}</span>
+          </div>
+          <div class="font-bold text-sm text-slate-950 leading-tight mb-2">${stop.description}</div>
+          ${
+            stop.distance
+              ? `<div class="text-[11px] text-emerald-700 font-semibold mb-2">📍 ${
+                  stop.distance < 1000
+                    ? `${stop.distance}m away`
+                    : `${(stop.distance / 1000).toFixed(1)}km away`
+                }</div>`
+              : ''
+          }
+          <button id="popup-view-arrivals-${stop.code}" class="w-full py-1.5 px-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer text-center">
             View Live Arrivals &rarr;
           </button>
         </div>
       `);
 
       marker.on('popupopen', () => {
-        const btn = document.getElementById(`popup-select-${stop.code}`);
+        const btn = document.getElementById(`popup-view-arrivals-${stop.code}`);
         if (btn) {
           btn.onclick = () => {
             onSelectStop(stop);
@@ -166,80 +210,187 @@ export const BusStopMap: React.FC<BusStopMapProps> = ({
         }
       });
 
-      markersLayer.addLayer(marker);
+      stopsLayer.addLayer(marker);
     });
-  }, [nearbyStops, selectedStop, onSelectStop]);
+  }, [allStops, selectedStop, highlightRoadName, selectedRoute, onSelectStop]);
 
-  // Pan to selected stop when it changes
+  // Render bus route polyline (busrouter.sg route path)
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    const routeLayer = routeLayerRef.current;
+    if (!map || !routeLayer) return;
+
+    routeLayer.clearLayers();
+
+    if (selectedRoute && selectedRoute.stops.length > 1) {
+      const routeCoordinates: [number, number][] = [];
+
+      selectedRoute.stops.forEach((stopCode) => {
+        const s = getBusStopByCode(stopCode);
+        if (s) {
+          routeCoordinates.push([s.latitude, s.longitude]);
+        }
+      });
+
+      if (routeCoordinates.length > 1) {
+        // Outer glowing line
+        const glowLine = L.polyline(routeCoordinates, {
+          color: selectedRoute.color || '#0ea5e9',
+          weight: 7,
+          opacity: 0.35,
+          lineCap: 'round',
+          lineJoin: 'round',
+        });
+
+        // Inner solid line
+        const solidLine = L.polyline(routeCoordinates, {
+          color: selectedRoute.color || '#0ea5e9',
+          weight: 4,
+          opacity: 0.9,
+          lineCap: 'round',
+          lineJoin: 'round',
+          dashArray: '8, 4',
+        });
+
+        routeLayer.addLayer(glowLine);
+        routeLayer.addLayer(solidLine);
+
+        // Fit map bounds to show whole route
+        map.fitBounds(L.latLngBounds(routeCoordinates), {
+          padding: [80, 80],
+          maxZoom: 15,
+        });
+      }
+    }
+  }, [selectedRoute]);
+
+  // Fit map when road is highlighted
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map || !highlightRoadName) return;
+
+    const matchingStops = allStops.filter((s) =>
+      s.roadName.toLowerCase().includes(highlightRoadName.toLowerCase())
+    );
+
+    if (matchingStops.length > 0) {
+      const bounds = L.latLngBounds(matchingStops.map((s) => [s.latitude, s.longitude]));
+      map.fitBounds(bounds, { padding: [100, 100], maxZoom: 16 });
+    }
+  }, [highlightRoadName, allStops]);
+
+  // Pan to selected stop smoothly
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map || !selectedStop) return;
 
     map.panTo([selectedStop.latitude, selectedStop.longitude], {
       animate: true,
-      duration: 0.8,
+      duration: 0.6,
     });
   }, [selectedStop]);
 
   const handleCenterOnUser = () => {
     const map = mapInstanceRef.current;
     if (userLocation && map) {
-      map.setView([userLocation.latitude, userLocation.longitude], 17, { animate: true });
+      map.setView([userLocation.latitude, userLocation.longitude], 16, { animate: true });
     } else {
       onRequestUserLocation();
     }
   };
 
-  const handleCenterOnSelectedStop = () => {
+  const handleResetSingaporeView = () => {
     const map = mapInstanceRef.current;
-    if (selectedStop && map) {
-      map.setView([selectedStop.latitude, selectedStop.longitude], 17, { animate: true });
+    if (map) {
+      map.setView([1.3521, 103.8198], 12, { animate: true });
     }
   };
 
   return (
-    <div
-      id="bus-stop-map-wrapper"
-      className="relative w-full h-80 sm:h-96 rounded-2xl overflow-hidden border border-slate-800/80 shadow-2xl bg-slate-900"
-    >
-      <div ref={mapContainerRef} className="w-full h-full z-10" />
+    <div id="bus-router-map-container" className="relative w-full h-full min-h-[500px] overflow-hidden bg-slate-900">
+      <div ref={mapContainerRef} className="w-full h-full z-0" />
 
-      {/* Floating Map Navigation Controls */}
-      <div className="absolute top-3 left-3 z-[400] flex flex-col gap-2">
+      {/* Floating Route Banner (when user inspects a bus service route) */}
+      {selectedRoute && (
+        <div
+          id="active-route-banner"
+          className="absolute top-28 left-1/2 -translate-x-1/2 z-[400] bg-slate-900/95 backdrop-blur-md border border-sky-500/40 px-4 py-2.5 rounded-2xl shadow-2xl flex items-center gap-3 text-xs max-w-lg w-[90%] sm:w-auto animate-fade-in"
+        >
+          <div className="w-8 h-8 rounded-lg bg-sky-500/20 text-sky-400 font-bold font-mono flex items-center justify-center border border-sky-500/30 shrink-0">
+            {selectedRoute.serviceNo}
+          </div>
+          <div className="min-w-0">
+            <div className="font-bold text-white truncate">{selectedRoute.name}</div>
+            <div className="text-[10px] text-slate-400 truncate">
+              {selectedRoute.origin} &rarr; {selectedRoute.destination} ({selectedRoute.stops.length} stops)
+            </div>
+          </div>
+          <button
+            onClick={onClearRoute}
+            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white cursor-pointer ml-auto shrink-0 transition-colors"
+            title="Clear Route"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Floating Highlighted Road Banner */}
+      {highlightRoadName && (
+        <div
+          id="highlighted-road-banner"
+          className="absolute top-28 left-1/2 -translate-x-1/2 z-[400] bg-slate-900/95 backdrop-blur-md border border-amber-500/40 px-4 py-2.5 rounded-2xl shadow-2xl flex items-center gap-3 text-xs max-w-lg w-[90%] sm:w-auto"
+        >
+          <span className="text-amber-400 font-bold">Road:</span>
+          <span className="font-semibold text-white truncate">{highlightRoadName}</span>
+          <button
+            onClick={onClearHighlightRoad}
+            className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white cursor-pointer ml-auto"
+            title="Clear road highlight"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* Floating Map Action Controls in Bottom Right */}
+      <div className="absolute bottom-6 right-4 z-[400] flex flex-col gap-2">
         <button
-          id="map-locate-me-btn"
+          id="map-locate-gps-btn"
           onClick={handleCenterOnUser}
           disabled={locatingUser}
-          title="Locate me & show nearest bus stops"
-          className="px-3 py-2 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-white border border-slate-700/80 shadow-lg text-xs font-semibold flex items-center gap-1.5 backdrop-blur-md transition-all cursor-pointer hover:border-emerald-500"
+          title="Locate my position (GPS)"
+          className="w-10 h-10 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-white border border-slate-700/80 shadow-xl flex items-center justify-center backdrop-blur-md transition-all cursor-pointer hover:border-sky-400 active:scale-95"
         >
-          <Locate className={`w-3.5 h-3.5 text-emerald-400 ${locatingUser ? 'animate-spin' : ''}`} />
-          <span>{locatingUser ? 'Locating...' : 'Nearest Stops'}</span>
+          <Locate className={`w-5 h-5 text-sky-400 ${locatingUser ? 'animate-spin' : ''}`} />
         </button>
 
-        {selectedStop && (
-          <button
-            id="map-focus-stop-btn"
-            onClick={handleCenterOnSelectedStop}
-            title="Focus on currently selected bus stop"
-            className="px-3 py-1.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-slate-200 border border-slate-700/80 shadow-lg text-xs font-medium flex items-center gap-1.5 backdrop-blur-md transition-all cursor-pointer"
-          >
-            <MapPin className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Focus Stop {selectedStop.code}</span>
-          </button>
-        )}
+        <button
+          id="map-reset-singapore-btn"
+          onClick={handleResetSingaporeView}
+          title="Reset to Singapore Overview"
+          className="w-10 h-10 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/80 shadow-xl flex items-center justify-center backdrop-blur-md transition-all cursor-pointer hover:border-sky-400 active:scale-95"
+        >
+          <Compass className="w-5 h-5" />
+        </button>
       </div>
 
-      {/* Map legend / status in bottom left */}
-      <div className="absolute bottom-3 left-3 z-[400] px-2.5 py-1.5 rounded-lg bg-slate-950/80 backdrop-blur-md border border-slate-800 text-[11px] text-slate-300 shadow-md flex items-center gap-3">
-        <span className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" />
-          Selected Stop
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-slate-700 inline-block" />
-          Nearby Stops ({nearbyStops.length})
-        </span>
+      {/* Map Legend (busrouter.sg reference) in Bottom Left */}
+      <div className="absolute bottom-6 left-4 z-[400] hidden sm:flex items-center gap-3 px-3 py-2 rounded-xl bg-slate-950/85 backdrop-blur-md border border-slate-800 text-[11px] text-slate-300 shadow-xl">
+        <div className="flex items-center gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-full bg-rose-600 border border-white/50 inline-block" />
+          <span>Bus Stop</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 border border-white inline-block" />
+          <span>Selected</span>
+        </div>
+        {userLocation && (
+          <div className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-sky-400 animate-pulse inline-block" />
+            <span>You</span>
+          </div>
+        )}
       </div>
     </div>
   );

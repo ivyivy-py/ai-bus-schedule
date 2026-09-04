@@ -1,8 +1,15 @@
+
+#platform
 node_modules/
 build/
 dist/
 coverage/
 .DS_Store
 *.log
+
+#secret never commit
+.env
 .env*
 !.env.example
+*.key
+*.pem

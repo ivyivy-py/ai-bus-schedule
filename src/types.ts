@@ -59,6 +59,18 @@ export interface WeatherForecastItem {
 
 export type WeatherCategory = 'sunny' | 'cloudy' | 'rain' | 'thunder' | 'night';
 
+export type SearchMode = 'service' | 'road' | 'stop_code';
+
+export interface BusRoute {
+  serviceNo: string;
+  name: string;
+  direction: number;
+  origin: string;
+  destination: string;
+  stops: string[]; // List of bus stop codes in route order
+  color?: string;
+}
+
 export interface WeatherForecastResponse {
   validPeriod: {
     start: string;
