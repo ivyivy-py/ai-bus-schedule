@@ -1,0 +1,10 @@
+{
+  "name": "Singapore Bus & Weather Ticker",
+  "description": "Real-time Singapore bus arrivals, nearby stops map, and 2-hour weather forecast with animated weather atmosphere.",
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
