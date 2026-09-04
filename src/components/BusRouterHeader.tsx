@@ -55,6 +55,11 @@ export const BusRouterHeader: React.FC<BusRouterHeaderProps> = ({
     { roadName: string; stopCount: number; stops: BusStop[] }[]
   >([]);
   const [serviceResults, setServiceResults] = useState<BusRoute[]>([]);
+  const [crossModeSuggestions, setCrossModeSuggestions] = useState<{
+    services: BusRoute[];
+    stops: BusStop[];
+    roads: { roadName: string; stopCount: number; stops: BusStop[] }[];
+  }>({ services: [], stops: [], roads: [] });
 
   // Live Singapore Clock (SGT, UTC+8)
   useEffect(() => {
@@ -82,30 +87,59 @@ export const BusRouterHeader: React.FC<BusRouterHeaderProps> = ({
       setStopResults([]);
       setRoadResults([]);
       setServiceResults([]);
+      setCrossModeSuggestions({ services: [], stops: [], roads: [] });
       return;
     }
 
+    // Auto-detect exact 5-digit bus stop number as user types or pastes
+    if (/^\d{5}$/.test(trimmed)) {
+      const match = searchBusStopsByCode(trimmed);
+      if (match.length > 0) {
+        onSelectStop(match[0]);
+      }
+    }
+
+    const services = searchBusServices(trimmed);
+    const roads = searchRoads(trimmed);
+    const stopsByCode = searchBusStopsByCode(trimmed);
+    const stopsByName = searchBusStops(trimmed);
+    // Combine stop matches, prioritizing exact code matches
+    const allMatchingStops = Array.from(
+      new Map([...stopsByCode, ...stopsByName].map((s) => [s.code, s])).values()
+    );
+
     if (searchMode === 'service') {
-      const services = searchBusServices(trimmed);
       setServiceResults(services);
       setRoadResults([]);
       setStopResults([]);
+      setCrossModeSuggestions({
+        services: [],
+        stops: allMatchingStops.slice(0, 5),
+        roads: roads.slice(0, 3),
+      });
     } else if (searchMode === 'road') {
-      const roads = searchRoads(trimmed);
       setRoadResults(roads);
-      // Also get stops on roads that match
-      const stopsOnRoads = searchBusStops(trimmed).filter((s) =>
+      const stopsOnRoads = allMatchingStops.filter((s) =>
         roads.some((r) => r.roadName.toLowerCase() === s.roadName.toLowerCase())
       );
-      setStopResults(stopsOnRoads.length > 0 ? stopsOnRoads : searchBusStops(trimmed));
+      setStopResults(stopsOnRoads.length > 0 ? stopsOnRoads : allMatchingStops);
       setServiceResults([]);
+      setCrossModeSuggestions({
+        services: services.slice(0, 5),
+        stops: [],
+        roads: [],
+      });
     } else if (searchMode === 'stop_code') {
-      const codeMatches = searchBusStopsByCode(trimmed);
-      setStopResults(codeMatches);
+      setStopResults(allMatchingStops);
       setRoadResults([]);
       setServiceResults([]);
+      setCrossModeSuggestions({
+        services: services.slice(0, 5),
+        stops: [],
+        roads: roads.slice(0, 3),
+      });
     }
-  }, [query, searchMode]);
+  }, [query, searchMode, onSelectStop]);
 
   // Handle outside click to close dropdown
   useEffect(() => {
@@ -120,7 +154,7 @@ export const BusRouterHeader: React.FC<BusRouterHeaderProps> = ({
 
   const handleStopPick = (stop: BusStop) => {
     onSelectStop(stop);
-    setQuery('');
+    setQuery(`${stop.code} • ${stop.description}`);
     setIsOpen(false);
   };
 
@@ -129,40 +163,88 @@ export const BusRouterHeader: React.FC<BusRouterHeaderProps> = ({
     if (stops.length > 0) {
       onSelectStop(stops[0]);
     }
-    setQuery('');
+    setQuery(roadName);
     setIsOpen(false);
   };
 
   const handleRoutePick = (route: BusRoute) => {
     onSelectRoute(route);
-    setQuery('');
+    setQuery(`Bus ${route.serviceNo}`);
     setIsOpen(false);
   };
 
-  // Submit top result on Enter press
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (searchMode === 'service') {
-      if (serviceResults.length > 0) {
-        handleRoutePick(serviceResults[0]);
-      } else if (query.trim()) {
-        const found = searchBusServices(query.trim());
-        if (found.length > 0) handleRoutePick(found[0]);
-      }
-    } else if (searchMode === 'road') {
-      if (roadResults.length > 0) {
-        handleRoadPick(roadResults[0].roadName, roadResults[0].stops);
-      } else if (stopResults.length > 0) {
-        handleStopPick(stopResults[0]);
-      }
-    } else if (searchMode === 'stop_code') {
-      if (stopResults.length > 0) {
-        handleStopPick(stopResults[0]);
-      } else if (/^\d{5}$/.test(query.trim())) {
-        const directStop = searchBusStopsByCode(query.trim());
-        if (directStop.length > 0) handleStopPick(directStop[0]);
+  // Smart search execution across active mode and fallbacks
+  const executeSearch = (rawQuery: string) => {
+    const q = rawQuery.trim();
+    if (!q) return;
+
+    // 1. If 5-digit number, match stop code directly
+    if (/^\d{5}$/.test(q)) {
+      const direct = searchBusStopsByCode(q);
+      if (direct.length > 0) {
+        handleStopPick(direct[0]);
+        return;
       }
     }
+
+    // 2. Active mode matches
+    if (searchMode === 'service') {
+      const services = searchBusServices(q);
+      if (services.length > 0) {
+        handleRoutePick(services[0]);
+        return;
+      }
+    } else if (searchMode === 'road') {
+      const roads = searchRoads(q);
+      if (roads.length > 0) {
+        handleRoadPick(roads[0].roadName, roads[0].stops);
+        return;
+      }
+      const stops = searchBusStops(q);
+      if (stops.length > 0) {
+        handleStopPick(stops[0]);
+        return;
+      }
+    } else if (searchMode === 'stop_code') {
+      const stops = searchBusStopsByCode(q);
+      if (stops.length > 0) {
+        handleStopPick(stops[0]);
+        return;
+      }
+    }
+
+    // 3. Smart cross-mode fallbacks:
+    // Try matching service (e.g. user typed "106", "143", "65")
+    const fallbackServices = searchBusServices(q);
+    if (fallbackServices.length > 0) {
+      handleRoutePick(fallbackServices[0]);
+      return;
+    }
+
+    // Try matching stop code or description (e.g. user typed "04121", "SMU", "Lucky Plaza")
+    const codeMatch = searchBusStopsByCode(q);
+    if (codeMatch.length > 0) {
+      handleStopPick(codeMatch[0]);
+      return;
+    }
+    const nameMatch = searchBusStops(q);
+    if (nameMatch.length > 0) {
+      handleStopPick(nameMatch[0]);
+      return;
+    }
+
+    // Try matching roads
+    const fallbackRoads = searchRoads(q);
+    if (fallbackRoads.length > 0) {
+      handleRoadPick(fallbackRoads[0].roadName, fallbackRoads[0].stops);
+      return;
+    }
+  };
+
+  // Submit top result on Enter press or Go button click
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    executeSearch(query);
   };
 
   // Switch mode and re-focus input with blank or converted query
@@ -279,11 +361,11 @@ export const BusRouterHeader: React.FC<BusRouterHeaderProps> = ({
                 }}
                 onFocus={() => setIsOpen(true)}
                 placeholder={activeConfig.placeholder}
-                className="w-full pl-10 pr-24 py-2.5 bg-slate-900/95 backdrop-blur-md text-white placeholder-slate-400 text-xs sm:text-sm rounded-2xl border border-slate-700/80 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 shadow-xl outline-none transition-all"
+                className="w-full pl-10 pr-32 py-2.5 bg-slate-900/95 backdrop-blur-md text-white placeholder-slate-400 text-xs sm:text-sm rounded-2xl border border-slate-700/80 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 shadow-xl outline-none transition-all"
               />
 
-              {/* Clear Button & Search Mode Pill */}
-              <div className="absolute right-2 flex items-center gap-1 z-10">
+              {/* Clear Button, Go Button, and Search Mode Pill */}
+              <div className="absolute right-2 flex items-center gap-1.5 z-10">
                 {query ? (
                   <button
                     type="button"
@@ -292,10 +374,22 @@ export const BusRouterHeader: React.FC<BusRouterHeaderProps> = ({
                       setIsOpen(false);
                     }}
                     className="p-1 text-slate-400 hover:text-white cursor-pointer"
+                    title="Clear input"
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
                 ) : null}
+
+                {/* Direct Go/Search Button */}
+                <button
+                  type="submit"
+                  id="busrouter-search-go-btn"
+                  className="px-2.5 py-1 rounded-xl bg-rose-600 hover:bg-rose-500 active:scale-95 text-white text-xs font-semibold flex items-center gap-1 shadow-md shadow-rose-900/30 transition-all cursor-pointer"
+                  title="Search and update bus arrivals"
+                >
+                  <span>Go</span>
+                  <ArrowRight className="w-3 h-3" />
+                </button>
 
                 <span
                   className={`px-2 py-0.5 rounded-lg border text-[10px] font-semibold tracking-wide uppercase font-mono hidden sm:inline-block ${activeConfig.tagColor}`}
@@ -383,9 +477,38 @@ export const BusRouterHeader: React.FC<BusRouterHeaderProps> = ({
                     </div>
 
                     {serviceResults.length === 0 ? (
-                      <div className="p-4 text-center text-xs text-slate-400">
-                        No bus service route found for &quot;{query}&quot;. Try services like 143,
-                        65, 190, 36, 24, 147.
+                      <div>
+                        <div className="p-3 text-center text-xs text-slate-400">
+                          No bus service route found for &quot;{query}&quot;. Try services like 106, 143, 65, 190.
+                        </div>
+                        {crossModeSuggestions.stops.length > 0 && (
+                          <div className="mt-2 pt-2 border-t border-slate-800">
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-rose-400 px-2 py-1">
+                              Matching Bus Stops in Singapore:
+                            </div>
+                            <div className="space-y-1">
+                              {crossModeSuggestions.stops.map((s) => (
+                                <button
+                                  key={s.code}
+                                  onClick={() => handleStopPick(s)}
+                                  className="w-full text-left px-3 py-2 rounded-xl hover:bg-slate-800/90 transition-colors flex items-center justify-between cursor-pointer group"
+                                >
+                                  <div className="flex items-center gap-2 truncate">
+                                    <span className="px-2 py-0.5 rounded bg-rose-600/30 text-rose-300 font-mono text-xs font-bold">
+                                      {s.code}
+                                    </span>
+                                    <span className="text-xs text-white group-hover:text-rose-300 truncate">
+                                      {s.description} ({s.roadName})
+                                    </span>
+                                  </div>
+                                  <span className="text-[11px] text-rose-400 font-semibold shrink-0">
+                                    View Arrivals →
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className="space-y-1 mt-1">
@@ -520,9 +643,39 @@ export const BusRouterHeader: React.FC<BusRouterHeaderProps> = ({
                     </div>
 
                     {stopResults.length === 0 ? (
-                      <div className="p-4 text-center text-xs text-slate-400">
-                        No bus stop found matching code &quot;{query}&quot;. Enter a 5-digit stop
-                        number (e.g. 09048, 83139).
+                      <div>
+                        <div className="p-4 text-center text-xs text-slate-400">
+                          No bus stop found matching code &quot;{query}&quot;. Enter a 5-digit stop
+                          number (e.g. 04121, 09048, 83139).
+                        </div>
+                        {crossModeSuggestions.services.length > 0 && (
+                          <div className="mt-2 pt-2 border-t border-slate-800">
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 px-2 py-1">
+                              Matching Bus Services:
+                            </div>
+                            <div className="space-y-1">
+                              {crossModeSuggestions.services.map((svc) => (
+                                <button
+                                  key={svc.serviceNo}
+                                  onClick={() => handleRoutePick(svc)}
+                                  className="w-full text-left px-3 py-2 rounded-xl hover:bg-slate-800/90 transition-colors flex items-center justify-between cursor-pointer group"
+                                >
+                                  <div className="flex items-center gap-2 truncate">
+                                    <span className="px-2 py-0.5 rounded bg-emerald-600/30 text-emerald-300 font-mono text-xs font-bold">
+                                      {svc.serviceNo}
+                                    </span>
+                                    <span className="text-xs text-white group-hover:text-emerald-300 truncate">
+                                      {svc.name}
+                                    </span>
+                                  </div>
+                                  <span className="text-[11px] text-emerald-400 font-semibold shrink-0">
+                                    Show Route →
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className="space-y-1 mt-1">

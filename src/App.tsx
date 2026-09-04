@@ -47,6 +47,10 @@ export default function App() {
 
   // Active route preview (busrouter.sg style polyline)
   const [selectedRoute, setSelectedRoute] = useState<BusRoute | null>(null);
+  const selectedRouteRef = useRef<BusRoute | null>(selectedRoute);
+  useEffect(() => {
+    selectedRouteRef.current = selectedRoute;
+  }, [selectedRoute]);
 
   // Highlighted road name (when user searches or clicks a road)
   const [highlightRoadName, setHighlightRoadName] = useState<string | null>(null);
@@ -136,12 +140,13 @@ export default function App() {
   /**
    * Fetch live bus arrivals for active stop
    */
-  const loadArrivals = useCallback(async (stop: BusStop) => {
+  const loadArrivals = useCallback(async (stop: BusStop, serviceNo?: string) => {
     const requestId = ++activeArrivalRequestIdRef.current;
     setArrivalsLoading(true);
 
     try {
-      const data = await fetchBusArrivals(stop.code);
+      const activeSvc = serviceNo || selectedRouteRef.current?.serviceNo;
+      const data = await fetchBusArrivals(stop.code, activeSvc);
       if (requestId === activeArrivalRequestIdRef.current) {
         setArrivalData(data);
         setArrivalsLoading(false);
@@ -159,7 +164,7 @@ export default function App() {
    */
   useEffect(() => {
     if (selectedStop) {
-      loadArrivals(selectedStop);
+      loadArrivals(selectedStop, selectedRouteRef.current?.serviceNo);
     }
   }, [selectedStop, loadArrivals]);
 
@@ -171,7 +176,7 @@ export default function App() {
       setCountdown((prev) => {
         if (prev <= 1) {
           if (selectedStopRef.current) {
-            loadArrivals(selectedStopRef.current);
+            loadArrivals(selectedStopRef.current, selectedRouteRef.current?.serviceNo);
           }
           return 30;
         }
@@ -218,17 +223,22 @@ export default function App() {
 
   const handleSelectStop = (stop: BusStop) => {
     setSelectedStop(stop);
-    // If a road highlight was active, keep or update
+    loadArrivals(stop, selectedRouteRef.current?.serviceNo);
   };
 
   const handleSelectRoute = (route: BusRoute) => {
     setSelectedRoute(route);
-    // Also select the first stop of the route if not already
-    if (route.stops.length > 0) {
-      const firstStop = getBusStopByCode(route.stops[0]);
-      if (firstStop) {
-        setSelectedStop(firstStop);
-      }
+    // If the currently selected stop is on this route, keep it; otherwise select the route's first stop
+    let targetStop: BusStop | undefined;
+    if (selectedStop && route.stops.includes(selectedStop.code)) {
+      targetStop = selectedStop;
+    } else if (route.stops.length > 0) {
+      targetStop = getBusStopByCode(route.stops[0]);
+    }
+
+    if (targetStop) {
+      setSelectedStop(targetStop);
+      loadArrivals(targetStop, route.serviceNo);
     }
   };
 
@@ -239,6 +249,7 @@ export default function App() {
     );
     if (stopsOnRoad.length > 0) {
       setSelectedStop(stopsOnRoad[0]);
+      loadArrivals(stopsOnRoad[0]);
     }
   };
 

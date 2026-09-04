@@ -5,17 +5,29 @@ import { POPULAR_BUS_SERVICES, getBusStopByCode } from '../data/singaporeBusStop
  * Generates realistic synthetic arrival times for Singapore bus stops
  * when the LTA DataMall AccountKey is not set in environment variables.
  */
-export function generateSimulatedArrivals(busStopCode: string): BusArrivalResponse {
+export function generateSimulatedArrivals(busStopCode: string, serviceNo?: string): BusArrivalResponse {
   const stop = getBusStopByCode(busStopCode);
-  const servicesList = POPULAR_BUS_SERVICES[busStopCode] || ['14', '65', '190', '502'];
+  let servicesList = [...(POPULAR_BUS_SERVICES[busStopCode] || ['14', '65', '106', '190', '502'])];
+
+  if (serviceNo && serviceNo.trim()) {
+    const cleanSvc = serviceNo.trim();
+    if (!servicesList.includes(cleanSvc)) {
+      servicesList.unshift(cleanSvc);
+    } else {
+      servicesList = [cleanSvc, ...servicesList.filter((s) => s !== cleanSvc)];
+    }
+  }
 
   const loads: BusCrowdLevel[] = ['SEA', 'SEA', 'SDA', 'LSD'];
   const types: BusVehicleType[] = ['SD', 'DD', 'DD', 'BD'];
   const operators = ['SBST', 'SMRT', 'GAS', 'TTS'];
 
+  // Hash stop code to create stable variations per stop
+  const stopHash = busStopCode.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+
   const services: BusServiceArrival[] = servicesList.map((svcNum, index) => {
-    // Generate randomized but realistic wait times (e.g. 2 min, 10 min, 22 min)
-    const baseOffsetMinutes = ((index * 3) % 7) + 1;
+    const svcHash = svcNum.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    const baseOffsetMinutes = ((stopHash + svcHash + index * 3) % 10) + 1;
     const now = Date.now();
 
     const eta1 = new Date(now + baseOffsetMinutes * 60 * 1000).toISOString();
@@ -24,22 +36,22 @@ export function generateSimulatedArrivals(busStopCode: string): BusArrivalRespon
 
     return {
       serviceNo: svcNum,
-      operator: operators[index % operators.length],
+      operator: svcNum === '106' ? 'TTS' : operators[(stopHash + index) % operators.length],
       nextBus: {
         estimatedArrival: eta1,
-        load: loads[(index + 1) % loads.length],
+        load: loads[(stopHash + index + 1) % loads.length],
         feature: 'WAB',
         type: types[index % types.length],
       },
       nextBus2: {
         estimatedArrival: eta2,
-        load: loads[index % loads.length],
+        load: loads[(stopHash + index) % loads.length],
         feature: 'WAB',
         type: types[(index + 1) % types.length],
       },
       nextBus3: {
         estimatedArrival: eta3,
-        load: loads[(index + 2) % loads.length],
+        load: loads[(stopHash + index + 2) % loads.length],
         feature: 'WAB',
         type: types[index % types.length],
       },
@@ -90,5 +102,5 @@ export async function fetchBusArrivals(
   }
 
   // Graceful fallback to realistic simulation
-  return generateSimulatedArrivals(cleanCode);
+  return generateSimulatedArrivals(cleanCode, serviceNo);
 }

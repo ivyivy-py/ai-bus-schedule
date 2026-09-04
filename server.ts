@@ -2,6 +2,7 @@ import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
+import { POPULAR_BUS_SERVICES, getBusStopByCode, SINGAPORE_BUS_STOPS } from './src/data/singaporeBusStops';
 
 dotenv.config();
 
@@ -88,37 +89,66 @@ app.get('/api/bus-arrival', async (req, res) => {
     }
   }
 
-  // Fallback realistic simulation
-  const mockServices = ['15', '24', '36', '65', '190'].slice(0, 4);
+  // Stop-specific realistic arrivals for Singapore bus stops
+  const stop = getBusStopByCode(busStopCode);
+  let assignedServices = POPULAR_BUS_SERVICES[busStopCode];
+
+  // If this stop code doesn't have an explicit list, use default diverse services
+  if (!assignedServices || assignedServices.length === 0) {
+    assignedServices = ['7', '14', '65', '106', '147', '190'];
+  }
+
+  // If a specific service was requested, ensure it is included and placed first
+  let servicesList = [...assignedServices];
+  if (serviceNo) {
+    if (!servicesList.includes(serviceNo)) {
+      servicesList = [serviceNo, ...servicesList];
+    } else {
+      servicesList = [serviceNo, ...servicesList.filter((s) => s !== serviceNo)];
+    }
+  }
+
   const now = Date.now();
-  const simulatedServices = mockServices.map((svc, i) => ({
-    serviceNo: svc,
-    operator: i % 2 === 0 ? 'SBST' : 'SMRT',
-    nextBus: {
-      estimatedArrival: new Date(now + ((i * 3) % 7 + 1) * 60 * 1000).toISOString(),
-      load: ['SEA', 'SEA', 'SDA', 'LSD'][i % 4] as any,
-      feature: 'WAB',
-      type: (i % 2 === 0 ? 'DD' : 'SD') as any,
-    },
-    nextBus2: {
-      estimatedArrival: new Date(now + ((i * 3) % 7 + 9) * 60 * 1000).toISOString(),
-      load: 'SEA' as any,
-      feature: 'WAB',
-      type: 'SD' as any,
-    },
-    nextBus3: {
-      estimatedArrival: new Date(now + ((i * 3) % 7 + 19) * 60 * 1000).toISOString(),
-      load: 'SEA' as any,
-      feature: 'WAB',
-      type: 'DD' as any,
-    },
-  }));
+  // Hash the stop code to produce stable, natural variations per stop
+  const stopHash = busStopCode.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+
+  const simulatedServices = servicesList.map((svc, i) => {
+    const svcHash = svc.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    // Produce varied arrival minutes (e.g. 1m, 3m, 6m, 12m) based on stop code and service
+    const baseOffsetMinutes = ((stopHash + svcHash + i * 3) % 10) + 1;
+    const operator = svc === '106' ? 'TTS' : ['SBST', 'SMRT', 'GAS', 'TTS'][(stopHash + i) % 4];
+
+    return {
+      serviceNo: svc,
+      operator,
+      nextBus: {
+        estimatedArrival: new Date(now + baseOffsetMinutes * 60 * 1000).toISOString(),
+        load: ['SEA', 'SEA', 'SDA', 'LSD'][(stopHash + i) % 4] as any,
+        feature: 'WAB',
+        type: (i % 2 === 0 ? 'DD' : 'SD') as any,
+      },
+      nextBus2: {
+        estimatedArrival: new Date(now + (baseOffsetMinutes + 6 + (i % 4)) * 60 * 1000).toISOString(),
+        load: ['SEA', 'SDA', 'SEA', 'LSD'][(stopHash + i + 1) % 4] as any,
+        feature: 'WAB',
+        type: 'SD' as any,
+      },
+      nextBus3: {
+        estimatedArrival: new Date(now + (baseOffsetMinutes + 16 + (i % 5)) * 60 * 1000).toISOString(),
+        load: 'SEA' as any,
+        feature: 'WAB',
+        type: 'DD' as any,
+      },
+    };
+  });
 
   return res.json({
     busStopCode,
-    services: serviceNo ? simulatedServices.filter(s => s.serviceNo === serviceNo) : simulatedServices,
+    busStopName: stop.description,
+    roadName: stop.roadName,
+    services: simulatedServices,
     isSimulated: true,
-    message: 'Simulated data. Set LTA_API_KEY environment variable for live Singapore LTA DataMall feed.',
+    message: 'Displaying simulated timings (configure LTA_API_KEY for live LTA DataMall feed)',
     timestamp: new Date().toISOString(),
   });
 });
