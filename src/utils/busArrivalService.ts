@@ -20,7 +20,14 @@ export function generateSimulatedArrivals(busStopCode: string, serviceNo?: strin
 
   const loads: BusCrowdLevel[] = ['SEA', 'SEA', 'SDA', 'LSD'];
   const types: BusVehicleType[] = ['SD', 'DD', 'DD', 'BD'];
-  const operators = ['SBST', 'SMRT', 'GAS', 'TTS'];
+  
+  const getOperator = (svc: string): string => {
+    const s = svc.toUpperCase();
+    if (['106', '66', '78', '79', '97', '98', '143', '183', '333', '334', '335', '857', '857B'].includes(s)) return 'TTS';
+    if (['12', '12E', '34', '36', '36A', '36B', '43', '62', '82', '83', '84', '85', '118', '119', '136', '381', '382', '386', '660', '663', '665'].includes(s)) return 'GAS';
+    if (['77', '167', '190', '61', '67', '75', '176', '178', '180', '184', '187', '188', '700', '850E', '854', '856', '858', '900', '901', '903', '911', '912', '913', '920', '922', '925', '950', '951E', '960', '961', '962', '963', '964', '965', '966', '969', '970', '972', '975', '980', '983', '985'].includes(s)) return 'SMRT';
+    return 'SBST';
+  };
 
   // Hash stop code to create stable variations per stop
   const stopHash = busStopCode.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
@@ -36,7 +43,7 @@ export function generateSimulatedArrivals(busStopCode: string, serviceNo?: strin
 
     return {
       serviceNo: svcNum,
-      operator: svcNum === '106' ? 'TTS' : operators[(stopHash + index) % operators.length],
+      operator: getOperator(svcNum),
       nextBus: {
         estimatedArrival: eta1,
         load: loads[(stopHash + index + 1) % loads.length],

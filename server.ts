@@ -112,11 +112,19 @@ app.get('/api/bus-arrival', async (req, res) => {
   // Hash the stop code to produce stable, natural variations per stop
   const stopHash = busStopCode.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
 
+  const getOperatorForService = (svc: string): string => {
+    const s = svc.toUpperCase();
+    if (['106', '66', '78', '79', '97', '98', '143', '183', '333', '334', '335', '857', '857B'].includes(s)) return 'TTS';
+    if (['12', '12E', '34', '36', '36A', '36B', '43', '62', '82', '83', '84', '85', '118', '119', '136', '381', '382', '386', '660', '663', '665'].includes(s)) return 'GAS';
+    if (['77', '167', '190', '61', '67', '75', '176', '178', '180', '184', '187', '188', '700', '850E', '854', '856', '858', '900', '901', '903', '911', '912', '913', '920', '922', '925', '950', '951E', '960', '961', '962', '963', '964', '965', '966', '969', '970', '972', '975', '980', '983', '985'].includes(s)) return 'SMRT';
+    return 'SBST';
+  };
+
   const simulatedServices = servicesList.map((svc, i) => {
     const svcHash = svc.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
     // Produce varied arrival minutes (e.g. 1m, 3m, 6m, 12m) based on stop code and service
     const baseOffsetMinutes = ((stopHash + svcHash + i * 3) % 10) + 1;
-    const operator = svc === '106' ? 'TTS' : ['SBST', 'SMRT', 'GAS', 'TTS'][(stopHash + i) % 4];
+    const operator = getOperatorForService(svc);
 
     return {
       serviceNo: svc,

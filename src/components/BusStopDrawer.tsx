@@ -188,6 +188,19 @@ export const BusStopDrawer: React.FC<BusStopDrawerProps> = ({
             </button>
           )}
         </div>
+
+        {services.length > 0 && (
+          <div className="flex items-center justify-between text-[11px] text-slate-400 mt-2 px-0.5">
+            <span className="font-medium text-slate-300">
+              {filteredServices.length} bus {filteredServices.length === 1 ? 'service' : 'services'} calling at this stop
+            </span>
+            {filterService && (
+              <span className="text-emerald-400 font-mono text-[10px]">
+                (of {services.length} total)
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Arrival Services List (busrouter.sg green badge style) */}
