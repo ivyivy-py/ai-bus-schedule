@@ -1,7 +1,17 @@
+import { POPULAR_BUS_SERVICES, getBusStopByCode } from '../src/data/singaporeBusStops';
+
 /**
  * Vercel Serverless Function: /api/bus-arrival
  * Queries the Singapore LTA DataMall v3 BusArrival API using the secret AccountKey.
  */
+
+const getOperator = (svc: string): string => {
+  const s = svc.toUpperCase();
+  if (['106', '66', '78', '79', '97', '98', '143', '183', '333', '334', '335', '857', '857B'].includes(s)) return 'TTS';
+  if (['12', '12E', '34', '36', '36A', '36B', '43', '62', '82', '83', '84', '85', '118', '119', '136', '381', '382', '386', '660', '663', '665'].includes(s)) return 'GAS';
+  if (['77', '167', '190', '61', '67', '75', '176', '178', '180', '184', '187', '188', '700', '850E', '854', '856', '858', '900', '901', '903', '911', '912', '913', '920', '922', '925', '950', '951E', '960', '961', '962', '963', '964', '965', '966', '969', '970', '972', '975', '980', '983', '985'].includes(s)) return 'SMRT';
+  return 'SBST';
+};
 
 export default async function handler(req: any, res: any) {
   // Allow CORS
@@ -73,35 +83,56 @@ export default async function handler(req: any, res: any) {
     }
   }
 
-  // Graceful simulation fallback
-  const mockServices = ['15', '24', '36', '65', '190'].slice(0, 4);
+  // Graceful simulation fallback using actual Singapore bus stop services
+  let assignedServices = POPULAR_BUS_SERVICES[busStopCode];
+  if (!assignedServices || assignedServices.length === 0) {
+    assignedServices = ['7', '14', '65', '106', '147', '190'];
+  }
+
+  let servicesList = [...assignedServices];
+  if (serviceNo) {
+    if (!servicesList.includes(serviceNo)) {
+      servicesList = [serviceNo, ...servicesList];
+    } else {
+      servicesList = [serviceNo, ...servicesList.filter((s) => s !== serviceNo)];
+    }
+  }
+
   const now = Date.now();
-  const simulated = mockServices.map((svc, i) => ({
-    serviceNo: svc,
-    operator: i % 2 === 0 ? 'SBST' : 'SMRT',
-    nextBus: {
-      estimatedArrival: new Date(now + ((i * 3) % 7 + 1) * 60 * 1000).toISOString(),
-      load: ['SEA', 'SEA', 'SDA', 'LSD'][i % 4],
-      feature: 'WAB',
-      type: i % 2 === 0 ? 'DD' : 'SD',
-    },
-    nextBus2: {
-      estimatedArrival: new Date(now + ((i * 3) % 7 + 8) * 60 * 1000).toISOString(),
-      load: 'SEA',
-      feature: 'WAB',
-      type: 'SD',
-    },
-    nextBus3: {
-      estimatedArrival: new Date(now + ((i * 3) % 7 + 17) * 60 * 1000).toISOString(),
-      load: 'SEA',
-      feature: 'WAB',
-      type: 'DD',
-    },
-  }));
+  const stopHash = busStopCode.split('').reduce((acc: number, char: string) => acc + char.charCodeAt(0), 0);
+
+  const simulated = servicesList.map((svc: string, i: number) => {
+    const svcHash = svc.split('').reduce((acc: number, char: string) => acc + char.charCodeAt(0), 0);
+    const baseOffsetMinutes = ((stopHash + svcHash + i * 3) % 10) + 1;
+    const operator = getOperator(svc);
+
+    return {
+      serviceNo: svc,
+      operator,
+      nextBus: {
+        estimatedArrival: new Date(now + baseOffsetMinutes * 60 * 1000).toISOString(),
+        load: ['SEA', 'SEA', 'SDA', 'LSD'][(stopHash + i) % 4] as any,
+        feature: 'WAB',
+        type: (i % 2 === 0 ? 'DD' : 'SD') as any,
+      },
+      nextBus2: {
+        estimatedArrival: new Date(now + (baseOffsetMinutes + 6 + (i % 4)) * 60 * 1000).toISOString(),
+        load: ['SEA', 'SDA', 'SEA', 'LSD'][(stopHash + i + 1) % 4] as any,
+        feature: 'WAB',
+        type: 'SD' as any,
+      },
+      nextBus3: {
+        estimatedArrival: new Date(now + (baseOffsetMinutes + 16 + (i % 5)) * 60 * 1000).toISOString(),
+        load: 'SEA' as any,
+        feature: 'WAB',
+        type: 'DD' as any,
+      },
+    };
+  });
 
   return res.status(200).json({
     busStopCode,
-    services: serviceNo ? simulated.filter(s => s.serviceNo === serviceNo) : simulated,
+    services: simulated,
     isSimulated: true,
     message: 'Simulated data. Set LTA_API_KEY environment variable in Vercel for live Singapore LTA DataMall feed.',
     timestamp: new Date().toISOString(),

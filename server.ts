@@ -1,6 +1,5 @@
 import express from 'express';
 import path from 'path';
-import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
 import { POPULAR_BUS_SERVICES, getBusStopByCode, SINGAPORE_BUS_STOPS } from './src/data/singaporeBusStops';
 
@@ -251,6 +250,7 @@ app.get('/api/health', (req, res) => {
 
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
