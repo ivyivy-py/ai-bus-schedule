@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { BusStop, BusArrivalResponse, BusRoute } from '../types';
 import { SINGAPORE_BUS_STOPS, SINGAPORE_BUS_ROUTES } from '../data/singaporeBusStops';
+import { fetchBusRoute } from '../utils/busRouteService';
 
 interface BusStopDrawerProps {
   selectedStop: BusStop | null;
@@ -68,6 +69,19 @@ export const BusStopDrawer: React.FC<BusStopDrawerProps> = ({
     return { text: `${diffMin}m`, isArr: false, min: diffMin };
   };
 
+  // Find the earliest arriving bus at this stop for the Bento summary
+  const earliestBus = services.reduce(
+    (acc: { svc: string; min: number; text: string } | null, s) => {
+      const formatted = formatMinutes(s.nextBus?.estimatedArrival);
+      if (!formatted) return acc;
+      if (!acc || formatted.min < acc.min) {
+        return { svc: s.serviceNo, min: formatted.min, text: formatted.text };
+      }
+      return acc;
+    },
+    null as { svc: string; min: number; text: string } | null
+  );
+
   const getLoadBadge = (load?: string) => {
     switch (load) {
       case 'SEA':
@@ -92,7 +106,17 @@ export const BusStopDrawer: React.FC<BusStopDrawerProps> = ({
     }
   };
 
-  const handleInspectRoute = (serviceNo: string) => {
+  const handleInspectRoute = async (serviceNo: string) => {
+    try {
+      const fetched = await fetchBusRoute(serviceNo);
+      if (fetched) {
+        onSelectRoute(fetched);
+        return;
+      }
+    } catch (e) {
+      console.warn('Error fetching route in drawer:', e);
+    }
+
     const foundRoute = SINGAPORE_BUS_ROUTES.find((r) => r.serviceNo === serviceNo);
     if (foundRoute) {
       onSelectRoute(foundRoute);
@@ -169,6 +193,29 @@ export const BusStopDrawer: React.FC<BusStopDrawerProps> = ({
           </div>
         </div>
 
+        {/* Bento Grid Header Summary Tiles */}
+        <div className="grid grid-cols-3 gap-2 mt-3 text-center">
+          <div className="bg-slate-900/90 rounded-2xl p-2 border border-slate-800/90 flex flex-col justify-center">
+            <span className="text-[10px] text-slate-400 font-medium">Services</span>
+            <span className="text-xs sm:text-sm font-bold text-white font-mono mt-0.5">
+              {services.length} {services.length === 1 ? 'line' : 'lines'}
+            </span>
+          </div>
+          <div className="bg-slate-900/90 rounded-2xl p-2 border border-slate-800/90 flex flex-col justify-center">
+            <span className="text-[10px] text-slate-400 font-medium">Earliest</span>
+            <span className="text-xs sm:text-sm font-bold text-emerald-400 font-mono mt-0.5 truncate">
+              {earliestBus ? `${earliestBus.text} (${earliestBus.svc})` : '-'}
+            </span>
+          </div>
+          <div className="bg-slate-900/90 rounded-2xl p-2 border border-slate-800/90 flex flex-col justify-center">
+            <span className="text-[10px] text-slate-400 font-medium">Next Sync</span>
+            <span className="text-xs sm:text-sm font-bold text-sky-400 font-mono mt-0.5 flex items-center justify-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse"></span>
+              {countdown}s
+            </span>
+          </div>
+        </div>
+
         {/* Filter input for services at this stop */}
         <div className="relative mt-3">
           <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -203,8 +250,8 @@ export const BusStopDrawer: React.FC<BusStopDrawerProps> = ({
         )}
       </div>
 
-      {/* Arrival Services List (busrouter.sg green badge style) */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-2.5 divide-y divide-slate-800/40">
+      {/* Arrival Services List (Bento card style) */}
+      <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-2.5">
         {loading && services.length === 0 ? (
           <div className="py-12 flex flex-col items-center justify-center text-slate-400 gap-2">
             <RefreshCw className="w-6 h-6 animate-spin text-emerald-400" />
@@ -227,14 +274,18 @@ export const BusStopDrawer: React.FC<BusStopDrawerProps> = ({
             return (
               <div
                 key={svc.serviceNo}
-                className="pt-2.5 first:pt-0 group hover:bg-slate-800/30 p-2 rounded-2xl transition-colors"
+                className="bg-slate-950/60 border border-slate-800/80 hover:border-slate-700/90 p-2.5 sm:p-3 rounded-2xl transition-all shadow-sm"
               >
                 <div className="flex items-center justify-between gap-2">
-                  {/* Bus Service Badge (Iconic busrouter.sg Green Badge) */}
+                  {/* Bus Service Badge (Clickable to Highlight Route) */}
                   <div className="flex items-center gap-2.5">
-                    <span className="w-14 py-1 rounded-xl bg-emerald-600 text-white font-mono font-extrabold text-sm text-center shadow-md shadow-emerald-950/40 border border-emerald-400/60 shrink-0">
+                    <button
+                      onClick={() => handleInspectRoute(svc.serviceNo)}
+                      className="w-13 sm:w-14 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-mono font-extrabold text-sm text-center shadow-md shadow-emerald-950/40 border border-emerald-400/60 shrink-0 cursor-pointer active:scale-95 transition-transform"
+                      title={`Click to highlight Bus ${svc.serviceNo} route on map`}
+                    >
                       {svc.serviceNo}
-                    </span>
+                    </button>
                     <div>
                       <div className="flex items-center gap-1.5">
                         <span className={`text-[10px] px-1.5 py-0.2 rounded border font-medium ${load1.bg}`}>
@@ -247,12 +298,12 @@ export const BusStopDrawer: React.FC<BusStopDrawerProps> = ({
                           <Accessibility className="w-3 h-3 text-sky-400" title="Wheelchair Accessible" />
                         )}
                       </div>
-                      <span className="text-[10px] text-slate-500">{svc.operator}</span>
+                      <span className="text-[10px] text-slate-500 font-mono">{svc.operator}</span>
                     </div>
                   </div>
 
-                  {/* Arrival Times (Next, 2nd, 3rd) */}
-                  <div className="flex items-center gap-2">
+                  {/* Arrival Times (Next, 2nd, 3rd) & Route Action */}
+                  <div className="flex items-center gap-2 sm:gap-2.5">
                     {/* Primary Arrival Timing */}
                     <div className="text-right">
                       {next1 ? (
@@ -280,11 +331,11 @@ export const BusStopDrawer: React.FC<BusStopDrawerProps> = ({
                       {next3 && <span className="text-slate-500">{next3.text}</span>}
                     </div>
 
-                    {/* View Route on Map Button (busrouter.sg style) */}
+                    {/* Highlight Route on Map Button */}
                     <button
                       onClick={() => handleInspectRoute(svc.serviceNo)}
-                      className="p-1.5 rounded-lg bg-slate-800 hover:bg-sky-600/30 hover:text-sky-300 text-slate-400 transition-colors cursor-pointer ml-1"
-                      title={`Show Bus ${svc.serviceNo} Route on Map`}
+                      className="p-1.5 rounded-xl bg-slate-800 hover:bg-sky-600/30 hover:text-sky-300 text-slate-400 transition-colors cursor-pointer ml-1 border border-slate-700/60"
+                      title={`Highlight Bus ${svc.serviceNo} route on map`}
                     >
                       <RouteIcon className="w-3.5 h-3.5" />
                     </button>

@@ -61,6 +61,22 @@ export type WeatherCategory = 'sunny' | 'cloudy' | 'rain' | 'thunder' | 'night';
 
 export type SearchMode = 'service' | 'road' | 'stop_code';
 
+export interface RouteStopDetail {
+  stopSequence: number;
+  busStopCode: string;
+  description?: string;
+  roadName?: string;
+  latitude?: number;
+  longitude?: number;
+  distanceKm?: number;
+  wdFirstBus?: string;
+  wdLastBus?: string;
+  satFirstBus?: string;
+  satLastBus?: string;
+  sunFirstBus?: string;
+  sunLastBus?: string;
+}
+
 export interface BusRoute {
   serviceNo: string;
   name: string;
@@ -69,6 +85,12 @@ export interface BusRoute {
   destination: string;
   stops: string[]; // List of bus stop codes in route order
   color?: string;
+  operator?: string;
+  distanceKm?: number;
+  firstBus?: string;
+  lastBus?: string;
+  availableDirections?: number[];
+  detailedStops?: RouteStopDetail[];
 }
 
 export interface WeatherForecastResponse {

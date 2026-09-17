@@ -1,7 +1,14 @@
 import express from 'express';
 import path from 'path';
 import dotenv from 'dotenv';
-import { POPULAR_BUS_SERVICES, getBusStopByCode, SINGAPORE_BUS_STOPS } from './src/data/singaporeBusStops';
+import {
+  POPULAR_BUS_SERVICES,
+  getBusStopByCode,
+  SINGAPORE_BUS_STOPS,
+  SINGAPORE_BUS_ROUTES,
+  searchBusServices,
+} from './src/data/singaporeBusStops';
+import { SERVICE_10_DIR1, SERVICE_10_DIR2 } from './src/data/ltaBusRoutesData';
 
 dotenv.config();
 
@@ -236,6 +243,84 @@ app.get('/api/weather', async (req, res) => {
       category: 'cloudy',
     });
   }
+});
+
+// 3. Bus Route API route (queries LTA DataMall BusRoutes or uses local curated routes)
+app.get('/api/bus-route', async (req, res) => {
+  const serviceNo = ((req.query.ServiceNo as string) || '').trim().toUpperCase();
+  const direction = parseInt(req.query.Direction as string, 10) || 1;
+
+  if (!serviceNo) {
+    return res.status(400).json({ error: 'ServiceNo parameter is required' });
+  }
+
+  // 1. Try querying LTA DataMall if LTA_API_KEY is configured
+  const apiKey = process.env.LTA_API_KEY || process.env.DATAMALL_API_KEY;
+  if (apiKey) {
+    try {
+      const url = `https://datamall2.mytransport.sg/ltaodataservice/BusRoutes?$filter=ServiceNo eq '${encodeURIComponent(serviceNo)}'`;
+      const response = await fetch(url, {
+        headers: {
+          AccountKey: apiKey,
+          accept: 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const records = data.value || [];
+        const dirRecords = records.filter((r: any) => r.Direction === direction);
+        const activeRecords = dirRecords.length > 0 ? dirRecords : records;
+
+        if (activeRecords.length > 0) {
+          activeRecords.sort((a: any, b: any) => a.StopSequence - b.StopSequence);
+          const stops = activeRecords.map((r: any) => r.BusStopCode);
+          const firstRecord = activeRecords[0];
+          const lastRecord = activeRecords[activeRecords.length - 1];
+          const firstStop = getBusStopByCode(firstRecord.BusStopCode);
+          const lastStop = getBusStopByCode(lastRecord.BusStopCode);
+
+          return res.json({
+            serviceNo,
+            direction,
+            operator: firstRecord.Operator || 'SBST',
+            name: `${firstStop.description} ⇄ ${lastStop.description}`,
+            origin: firstStop.description,
+            destination: lastStop.description,
+            stops,
+            distanceKm: lastRecord.Distance || 0,
+            firstBus: firstRecord.WD_FirstBus ? `${firstRecord.WD_FirstBus.slice(0, 2)}:${firstRecord.WD_FirstBus.slice(2)}` : '05:30',
+            lastBus: firstRecord.WD_LastBus ? `${firstRecord.WD_LastBus.slice(0, 2)}:${firstRecord.WD_LastBus.slice(2)}` : '23:30',
+            availableDirections: Array.from(new Set(records.map((r: any) => r.Direction as number))),
+            isLiveLTA: true,
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('Error querying LTA DataMall BusRoutes API:', err);
+    }
+  }
+
+  // 2. Fallback to curated local route data
+  if (serviceNo === '10') {
+    return res.json(direction === 2 ? SERVICE_10_DIR2 : SERVICE_10_DIR1);
+  }
+
+  const foundRoute = SINGAPORE_BUS_ROUTES.find(
+    (r) => r.serviceNo.toUpperCase() === serviceNo && (r.direction === direction || !r.direction)
+  ) || SINGAPORE_BUS_ROUTES.find((r) => r.serviceNo.toUpperCase() === serviceNo);
+
+  if (foundRoute) {
+    return res.json(foundRoute);
+  }
+
+  // 3. Fallback: Synthesize from searchBusServices
+  const dynamicRoutes = searchBusServices(serviceNo);
+  if (dynamicRoutes.length > 0) {
+    return res.json(dynamicRoutes[0]);
+  }
+
+  return res.status(404).json({ error: `Route for service ${serviceNo} not found` });
 });
 
 // Health endpoint

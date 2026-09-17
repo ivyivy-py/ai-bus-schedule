@@ -1,4 +1,10 @@
 import { BusStop, BusRoute } from '../types';
+import {
+  SERVICE_10_DIR1,
+  SERVICE_10_DIR2,
+  SERVICE_10_STOPS_MAP,
+  getAllService10BusStops,
+} from './ltaBusRoutesData';
 
 /**
  * Normalizes Singapore road, transit and landmark terms to canonical forms.
@@ -48,7 +54,7 @@ export function normalizeSingaporeText(str: string): string {
  * Comprehensive database of Singapore bus stops covering key roads,
  * MRT stations, transport interchanges, and tourist/commercial corridors.
  */
-export const SINGAPORE_BUS_STOPS: BusStop[] = [
+const BASE_SINGAPORE_BUS_STOPS: BusStop[] = [
   // ==========================================
   // ORCHARD ROAD & CITY SHOPPING BELT
   // ==========================================
@@ -246,6 +252,14 @@ export const SINGAPORE_BUS_STOPS: BusStop[] = [
   { code: '10049', roadName: 'Tiong Bahru Rd', description: 'Opp Tiong Bahru Plaza', latitude: 1.2868, longitude: 103.8279 },
 ];
 
+const SERVICE_10_EXTRA_STOPS = getAllService10BusStops();
+export const SINGAPORE_BUS_STOPS: BusStop[] = [
+  ...BASE_SINGAPORE_BUS_STOPS,
+  ...SERVICE_10_EXTRA_STOPS.filter(
+    (s) => !BASE_SINGAPORE_BUS_STOPS.some((b) => b.code === s.code)
+  ),
+];
+
 /**
  * Common Singapore bus services assigned to bus stops for fallback simulation
  * if the LTA DataMall API key is not configured in Vercel environment variables.
@@ -346,6 +360,8 @@ export const POPULAR_BUS_SERVICES: Record<string, string[]> = {
  * Allows users to inspect routes and render polylines along actual Singapore paths.
  */
 export const SINGAPORE_BUS_ROUTES: BusRoute[] = [
+  SERVICE_10_DIR1,
+  SERVICE_10_DIR2,
   {
     serviceNo: '106',
     name: 'Bukit Batok ⇄ Shenton Way (via SMU)',
@@ -762,6 +778,17 @@ export function searchBusStopsByCode(codeQuery: string): BusStop[] {
 export function getBusStopByCode(code: string): BusStop {
   const found = SINGAPORE_BUS_STOPS.find((s) => s.code === code);
   if (found) return found;
+
+  const s10 = SERVICE_10_STOPS_MAP[code];
+  if (s10) {
+    return {
+      code,
+      roadName: s10.roadName,
+      description: s10.description,
+      latitude: s10.lat,
+      longitude: s10.lng,
+    };
+  }
 
   return {
     code,

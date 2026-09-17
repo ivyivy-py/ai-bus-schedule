@@ -24,6 +24,7 @@ import { SINGAPORE_BUS_STOPS, getBusStopByCode, SINGAPORE_BUS_ROUTES } from './d
 import { calculateDistanceInMeters } from './utils/haversine';
 import { fetchSingaporeWeather } from './utils/weatherService';
 import { fetchBusArrivals } from './utils/busArrivalService';
+import { fetchBusRoute } from './utils/busRouteService';
 import { WeatherBackground } from './components/WeatherBackground';
 import { BusStopMap } from './components/BusStopMap';
 import { BusRouterHeader } from './components/BusRouterHeader';
@@ -226,8 +227,22 @@ export default function App() {
     loadArrivals(stop, selectedRouteRef.current?.serviceNo);
   };
 
-  const handleSelectRoute = (route: BusRoute) => {
+  const handleSelectRoute = async (route: BusRoute) => {
     setSelectedRoute(route);
+
+    // Asynchronously enrich with full LTA route if route does not have complete stops
+    if (!route.detailedStops || route.stops.length < 8) {
+      try {
+        const enriched = await fetchBusRoute(route.serviceNo, route.direction || 1);
+        if (enriched && enriched.stops && enriched.stops.length >= route.stops.length) {
+          setSelectedRoute(enriched);
+          route = enriched;
+        }
+      } catch (err) {
+        console.warn('Could not enrich route:', err);
+      }
+    }
+
     // If the currently selected stop is on this route, keep it; otherwise select the route's first stop
     let targetStop: BusStop | undefined;
     if (selectedStop && route.stops.includes(selectedStop.code)) {
@@ -239,6 +254,19 @@ export default function App() {
     if (targetStop) {
       setSelectedStop(targetStop);
       loadArrivals(targetStop, route.serviceNo);
+    }
+  };
+
+  const handleToggleRouteDirection = async () => {
+    if (!selectedRoute) return;
+    const nextDir = (selectedRoute.direction === 1) ? 2 : 1;
+    try {
+      const nextRoute = await fetchBusRoute(selectedRoute.serviceNo, nextDir);
+      if (nextRoute) {
+        handleSelectRoute(nextRoute);
+      }
+    } catch (err) {
+      console.warn('Error toggling route direction:', err);
     }
   };
 
@@ -283,6 +311,7 @@ export default function App() {
           onSelectStop={handleSelectStop}
           selectedRoute={selectedRoute}
           onClearRoute={() => setSelectedRoute(null)}
+          onToggleRouteDirection={handleToggleRouteDirection}
           onRequestUserLocation={handleRequestUserLocation}
           locatingUser={isLocating}
           highlightRoadName={highlightRoadName}

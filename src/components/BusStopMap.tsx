@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import { BusStop, BusRoute } from '../types';
-import { Locate, Compass, Route as RouteIcon, X, Layers } from 'lucide-react';
+import { Locate, Compass, Route as RouteIcon, X, Layers, RefreshCw } from 'lucide-react';
 import { SINGAPORE_BUS_STOPS, getBusStopByCode } from '../data/singaporeBusStops';
 
 interface BusStopMapProps {
@@ -11,6 +11,7 @@ interface BusStopMapProps {
   onSelectStop: (stop: BusStop) => void;
   selectedRoute: BusRoute | null;
   onClearRoute: () => void;
+  onToggleRouteDirection?: () => void;
   onRequestUserLocation: () => void;
   locatingUser: boolean;
   highlightRoadName: string | null;
@@ -24,6 +25,7 @@ export const BusStopMap: React.FC<BusStopMapProps> = ({
   onSelectStop,
   selectedRoute,
   onClearRoute,
+  onToggleRouteDirection,
   onRequestUserLocation,
   locatingUser,
   highlightRoadName,
@@ -123,18 +125,31 @@ export const BusStopMap: React.FC<BusStopMapProps> = ({
 
     stopsLayer.clearLayers();
 
-    // Use either allStops or fallback to SINGAPORE_BUS_STOPS
-    const stopsToRender = allStops.length > 0 ? allStops : SINGAPORE_BUS_STOPS;
+    // Ensure all stops in selectedRoute are included in rendering even if distant
+    const stopsMap = new Map<string, BusStop>();
+    const baseStops = allStops.length > 0 ? allStops : SINGAPORE_BUS_STOPS;
+    baseStops.forEach((s) => stopsMap.set(s.code, s));
+
+    if (selectedRoute) {
+      selectedRoute.stops.forEach((code) => {
+        if (!stopsMap.has(code)) {
+          stopsMap.set(code, getBusStopByCode(code));
+        }
+      });
+    }
+
+    const stopsToRender = Array.from(stopsMap.values());
 
     stopsToRender.forEach((stop) => {
       const isSelected = selectedStop?.code === stop.code;
       const isRoadHighlighted =
         highlightRoadName &&
         stop.roadName.toLowerCase().includes(highlightRoadName.toLowerCase());
-      const isRouteStop = selectedRoute?.stops.includes(stop.code);
+      const routeSeq = selectedRoute ? selectedRoute.stops.indexOf(stop.code) : -1;
+      const isRouteStop = routeSeq !== -1;
 
       // Distinctive busrouter.sg style marker:
-      // Red pill badge with white text, or green if selected, amber if route stop
+      // Red pill badge with white text, or green if selected, sky blue if route stop
       const badgeBg = isSelected
         ? 'bg-emerald-600 text-white border-white ring-4 ring-emerald-400/50 shadow-emerald-500/50'
         : isRouteStop
@@ -143,15 +158,17 @@ export const BusStopMap: React.FC<BusStopMapProps> = ({
         ? 'bg-amber-600 text-white border-white ring-2 ring-amber-400'
         : 'bg-rose-600 hover:bg-rose-500 text-white border-white/90 shadow-md';
 
+      const labelText = isRouteStop ? `#${routeSeq + 1} ${stop.code}` : stop.code;
+
       const stopIcon = L.divIcon({
         className: 'custom-bus-stop-pin',
         html: `
           <div class="cursor-pointer transition-all duration-200 hover:scale-125 flex flex-col items-center group ${
-            isSelected ? 'scale-115 z-50' : 'z-20'
+            isSelected ? 'scale-115 z-50' : isRouteStop ? 'z-40' : 'z-20'
           }">
             <div class="px-1.5 py-0.5 rounded-full shadow-lg text-[10px] font-mono font-bold tracking-tight flex items-center gap-1 border ${badgeBg}">
-              <span class="w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-white animate-pulse' : 'bg-rose-200'}"></span>
-              <span>${stop.code}</span>
+              <span class="w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-white animate-pulse' : isRouteStop ? 'bg-sky-200' : 'bg-rose-200'}"></span>
+              <span>${labelText}</span>
             </div>
             <div class="w-0 h-0 border-l-[3px] border-l-transparent border-r-[3px] border-r-transparent border-t-[4px] ${
               isSelected
@@ -164,8 +181,8 @@ export const BusStopMap: React.FC<BusStopMapProps> = ({
             }"></div>
           </div>
         `,
-        iconSize: [46, 24],
-        iconAnchor: [23, 22],
+        iconSize: isRouteStop ? [60, 24] : [46, 24],
+        iconAnchor: isRouteStop ? [30, 22] : [23, 22],
       });
 
       const marker = L.marker([stop.latitude, stop.longitude], {
@@ -310,28 +327,74 @@ export const BusStopMap: React.FC<BusStopMapProps> = ({
     <div id="bus-router-map-container" className="relative w-full h-full min-h-[500px] overflow-hidden bg-slate-900">
       <div ref={mapContainerRef} className="w-full h-full z-0" />
 
-      {/* Floating Route Banner (when user inspects a bus service route) */}
+      {/* Bento Grid Floating Route Card */}
       {selectedRoute && (
         <div
-          id="active-route-banner"
-          className="absolute top-28 left-1/2 -translate-x-1/2 z-[400] bg-slate-900/95 backdrop-blur-md border border-sky-500/40 px-4 py-2.5 rounded-2xl shadow-2xl flex items-center gap-3 text-xs max-w-lg w-[90%] sm:w-auto animate-fade-in"
+          id="active-route-bento-card"
+          className="absolute top-24 sm:top-28 left-1/2 -translate-x-1/2 z-[400] w-[95%] max-w-xl bg-slate-950/92 backdrop-blur-xl border border-sky-500/40 rounded-2xl shadow-2xl p-3 text-slate-100 animate-in fade-in slide-in-from-top-4 duration-200"
         >
-          <div className="w-8 h-8 rounded-lg bg-sky-500/20 text-sky-400 font-bold font-mono flex items-center justify-center border border-sky-500/30 shrink-0">
-            {selectedRoute.serviceNo}
-          </div>
-          <div className="min-w-0">
-            <div className="font-bold text-white truncate">{selectedRoute.name}</div>
-            <div className="text-[10px] text-slate-400 truncate">
-              {selectedRoute.origin} &rarr; {selectedRoute.destination} ({selectedRoute.stops.length} stops)
+          <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 pb-2 mb-2">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="px-2.5 py-1 rounded-xl bg-sky-500 text-white font-mono font-black text-sm tracking-wide shadow-md shadow-sky-500/20 shrink-0">
+                {selectedRoute.serviceNo}
+              </span>
+              {selectedRoute.operator && (
+                <span className="px-1.5 py-0.5 rounded-md bg-slate-800 text-slate-300 font-mono text-[10px] uppercase font-bold border border-slate-700 shrink-0">
+                  {selectedRoute.operator}
+                </span>
+              )}
+              <div className="min-w-0 truncate">
+                <span className="text-xs font-bold text-white truncate block">
+                  {selectedRoute.name}
+                </span>
+                <span className="text-[11px] text-slate-400 truncate block">
+                  {selectedRoute.origin} &rarr; {selectedRoute.destination}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5 shrink-0">
+              {onToggleRouteDirection && (
+                <button
+                  onClick={onToggleRouteDirection}
+                  className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-sky-400 hover:text-sky-300 text-xs font-semibold flex items-center gap-1 border border-slate-700 cursor-pointer transition-colors"
+                  title="Switch Direction"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  <span>Dir {selectedRoute.direction || 1}</span>
+                </button>
+              )}
+              <button
+                onClick={onClearRoute}
+                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white cursor-pointer transition-colors"
+                title="Clear highlighted route"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
           </div>
-          <button
-            onClick={onClearRoute}
-            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white cursor-pointer ml-auto shrink-0 transition-colors"
-            title="Clear Route"
-          >
-            <X className="w-4 h-4" />
-          </button>
+
+          {/* Bento Sub-Metrics Grid */}
+          <div className="grid grid-cols-4 gap-2 text-center text-[11px]">
+            <div className="bg-slate-900/80 rounded-xl p-1.5 border border-slate-800/80">
+              <div className="text-slate-400 text-[10px]">Stops</div>
+              <div className="font-bold text-white font-mono">{selectedRoute.stops.length}</div>
+            </div>
+            <div className="bg-slate-900/80 rounded-xl p-1.5 border border-slate-800/80">
+              <div className="text-slate-400 text-[10px]">Distance</div>
+              <div className="font-bold text-sky-400 font-mono">
+                {selectedRoute.distanceKm ? `${selectedRoute.distanceKm} km` : 'Full Run'}
+              </div>
+            </div>
+            <div className="bg-slate-900/80 rounded-xl p-1.5 border border-slate-800/80">
+              <div className="text-slate-400 text-[10px]">First Bus</div>
+              <div className="font-bold text-emerald-400 font-mono">{selectedRoute.firstBus || '05:30'}</div>
+            </div>
+            <div className="bg-slate-900/80 rounded-xl p-1.5 border border-slate-800/80">
+              <div className="text-slate-400 text-[10px]">Last Bus</div>
+              <div className="font-bold text-amber-400 font-mono">{selectedRoute.lastBus || '23:30'}</div>
+            </div>
+          </div>
         </div>
       )}
 
