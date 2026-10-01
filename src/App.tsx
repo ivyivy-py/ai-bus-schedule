@@ -12,6 +12,7 @@ import {
   Layers,
   ArrowRight,
   X,
+  Code,
 } from 'lucide-react';
 import {
   BusStop,
@@ -30,6 +31,7 @@ import { BusStopMap } from './components/BusStopMap';
 import { BusRouterHeader } from './components/BusRouterHeader';
 import { BusStopDrawer } from './components/BusStopDrawer';
 import { WeatherModal } from './components/WeatherModal';
+import { OneMapCreditModal } from './components/OneMapCreditModal';
 
 export default function App() {
   // User device location
@@ -70,8 +72,9 @@ export default function App() {
   const [isWeatherModalOpen, setIsWeatherModalOpen] = useState<boolean>(false);
   const [showWeatherOverlay, setShowWeatherOverlay] = useState<boolean>(true);
 
-  // Info modal toggle
+  // Info & OneMap modal toggles
   const [showInfoModal, setShowInfoModal] = useState<boolean>(false);
+  const [showOneMapModal, setShowOneMapModal] = useState<boolean>(false);
 
   // Keep a ref to avoid stale closures in interval
   const selectedStopRef = useRef<BusStop | null>(selectedStop);
@@ -333,30 +336,79 @@ export default function App() {
         />
       )}
 
-      {/* Floating Bottom Quick Bar (Weather toggle, Info modal, Simulation indicator) */}
-      <footer className="absolute bottom-4 right-16 z-[400] flex items-center gap-2 pointer-events-auto">
-        <button
-          onClick={() => setShowInfoModal(true)}
-          className="px-3 py-1.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/80 shadow-lg text-xs font-medium flex items-center gap-1.5 backdrop-blur-md cursor-pointer transition-all"
-          title="About & Vercel API Key Setup"
-        >
-          <Info className="w-3.5 h-3.5 text-sky-400" />
-          <span className="hidden md:inline">API & Guide</span>
-        </button>
+      {/* Floating Bottom Footer Bar (OneMap Credit, Sample Code, Weather toggle, Info modal) */}
+      <footer className="absolute bottom-3 left-3 right-3 sm:left-4 sm:right-4 z-[400] flex flex-wrap items-center justify-between gap-2 pointer-events-none">
+        {/* Left: Official OneMap Singapore Team Credit Badge */}
+        <div className="pointer-events-auto flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-slate-950/90 hover:bg-slate-900/95 border border-slate-800 text-[11px] text-slate-300 backdrop-blur-md shadow-xl transition-all">
+          <img
+            src="https://www.onemap.gov.sg/web-assets/images/logo/om_logo.png"
+            style={{ height: '18px', width: '18px' }}
+            alt="OneMap Logo"
+            className="shrink-0"
+          />
+          <span className="flex items-center gap-1.5 flex-wrap">
+            <a
+              href="https://www.onemap.gov.sg/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-amber-300 font-semibold hover:underline"
+            >
+              OneMap
+            </a>
+            <span className="text-slate-500">&copy;</span>
+            <span className="text-slate-400">contributors</span>
+            <span className="text-slate-600">&#124;</span>
+            <a
+              href="https://www.sla.gov.sg/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-slate-300 hover:text-white underline underline-offset-2"
+            >
+              Singapore Land Authority
+            </a>
+          </span>
 
-        <button
-          onClick={() => setShowWeatherOverlay(!showWeatherOverlay)}
-          className={`px-3 py-1.5 rounded-xl border shadow-lg text-xs font-medium flex items-center gap-1.5 backdrop-blur-md cursor-pointer transition-all ${
-            showWeatherOverlay
-              ? 'bg-slate-900/90 text-amber-300 border-amber-500/40'
-              : 'bg-slate-900/60 text-slate-400 border-slate-800'
-          }`}
-          title="Toggle Animated Weather Atmosphere"
-        >
-          <Sparkles className="w-3.5 h-3.5" />
-          <span className="hidden md:inline">Atmosphere</span>
-        </button>
+          <button
+            onClick={() => setShowOneMapModal(true)}
+            className="ml-1 sm:ml-2 px-2 py-0.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-semibold text-[10px] flex items-center gap-1 transition-colors cursor-pointer border border-amber-500/30"
+            title="View OneMap TileJSON Sample Code & API"
+          >
+            <Code className="w-3 h-3" />
+            <span>Sample Code</span>
+          </button>
+        </div>
+
+        {/* Right: Quick Action Controls */}
+        <div className="pointer-events-auto flex items-center gap-2 ml-auto">
+          <button
+            onClick={() => setShowInfoModal(true)}
+            className="px-3 py-1.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/80 shadow-lg text-xs font-medium flex items-center gap-1.5 backdrop-blur-md cursor-pointer transition-all"
+            title="About & Vercel API Key Setup"
+          >
+            <Info className="w-3.5 h-3.5 text-sky-400" />
+            <span className="hidden md:inline">API & Guide</span>
+          </button>
+
+          <button
+            onClick={() => setShowWeatherOverlay(!showWeatherOverlay)}
+            className={`px-3 py-1.5 rounded-xl border shadow-lg text-xs font-medium flex items-center gap-1.5 backdrop-blur-md cursor-pointer transition-all ${
+              showWeatherOverlay
+                ? 'bg-slate-900/90 text-amber-300 border-amber-500/40'
+                : 'bg-slate-900/60 text-slate-400 border-slate-800'
+            }`}
+            title="Toggle Animated Weather Atmosphere"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span className="hidden md:inline">Atmosphere</span>
+          </button>
+        </div>
       </footer>
+
+      {/* OneMap SLA Credit & Sample Code Modal */}
+      <OneMapCreditModal
+        isOpen={showOneMapModal}
+        onClose={() => setShowOneMapModal(false)}
+      />
 
       {/* Weather Modal / Forecast Drawer */}
       <WeatherModal
@@ -418,19 +470,50 @@ export default function App() {
                   <span>Vercel Hosting & Environment Variables</span>
                 </div>
                 <p className="text-[11px] text-slate-400">
-                  This app queries the LTA DataMall API. When hosting on Vercel, define:
+                  Configure your keys in Vercel or local <code className="text-emerald-300 font-mono">.env</code>:
                 </p>
-                <code className="block p-2 rounded bg-slate-900 font-mono text-[11px] text-emerald-300 border border-slate-800">
-                  LTA_DATAMALL_API_KEY=your_lta_account_key_here
-                </code>
+                <div className="space-y-1">
+                  <code className="block p-1.5 rounded bg-slate-900 font-mono text-[10px] text-emerald-300 border border-slate-800">
+                    LTA_ACCOUNT_KEY=your_lta_account_key
+                  </code>
+                  <code className="block p-1.5 rounded bg-slate-900 font-mono text-[10px] text-amber-300 border border-slate-800">
+                    ONE_MAP_API_KEY=your_onemap_key
+                  </code>
+                </div>
                 <p className="text-[10px] text-slate-500">
-                  If the key is not set, the built-in resilient simulator automatically provides realistic
-                  Singapore bus arrival timings and load levels so the app always functions seamlessly.
+                  If keys are not provided, built-in resilient fallbacks (realistic Singapore bus arrivals
+                  and curated geometry) ensure seamless operation.
+                </p>
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 space-y-2">
+                <div className="font-semibold text-amber-400 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <img
+                      src="https://www.onemap.gov.sg/web-assets/images/logo/om_logo.png"
+                      alt="OneMap"
+                      className="w-4 h-4"
+                    />
+                    <span>Singapore OneMap (SLA)</span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setShowInfoModal(false);
+                      setShowOneMapModal(true);
+                    }}
+                    className="text-[11px] text-amber-300 hover:text-white underline font-semibold cursor-pointer"
+                  >
+                    View Sample Code ↗
+                  </button>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Official Singapore Land Authority base map and spatial layers. Compliant with SLA attribution
+                  guidelines.
                 </p>
               </div>
 
               <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 space-y-1">
-                <div className="font-semibold text-amber-400">Singapore NEA Weather</div>
+                <div className="font-semibold text-sky-400">Singapore NEA Weather</div>
                 <p className="text-[11px] text-slate-400">
                   Powered by data.gov.sg 2-Hour Weather Forecast API with live canvas weather
                   particles (sunshine rays, raindrops, thunder flashes, starry night).

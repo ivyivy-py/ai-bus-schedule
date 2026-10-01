@@ -56,6 +56,13 @@ export const BusStopMap: React.FC<BusStopMapProps> = ({
       minZoom: 11,
     });
 
+    // Set OneMap attribution prefix (Singapore Land Authority compliance)
+    if (map.attributionControl) {
+      map.attributionControl.setPrefix(
+        '<img src="https://www.onemap.gov.sg/web-assets/images/logo/om_logo.png" style="height:16px;width:16px;display:inline-block;vertical-align:middle;margin-right:4px;"/>&nbsp;<a href="https://www.onemap.gov.sg/" target="_blank" rel="noopener noreferrer">OneMap</a>&nbsp;&copy;&nbsp;contributors&nbsp;&#124;&nbsp;<a href="https://www.sla.gov.sg/" target="_blank" rel="noopener noreferrer">Singapore Land Authority</a>'
+      );
+    }
+
     // High quality modern cartography tile layer
     L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
       attribution:

@@ -10,6 +10,7 @@ import {
 } from './src/data/singaporeBusStops';
 import { SERVICE_10_DIR1, SERVICE_10_DIR2 } from './src/data/ltaBusRoutesData';
 import healthHandler from './api/health.js';
+import onemapHandler from './api/onemap.js';
 
 dotenv.config();
 
@@ -333,6 +334,14 @@ app.get('/api/bus-route', async (req, res) => {
 // Health and API monitoring endpoint
 app.all(['/api/health', '/api/health.js'], (req, res) => {
   return healthHandler(req, res);
+});
+
+// OneMap base map and sample endpoint
+app.all(['/api/onemap', '/api/onemap.js', '/api/onemap.html', '/api/onemap-sample.html'], (req, res) => {
+  if (req.path.endsWith('.html')) {
+    req.query.format = 'html';
+  }
+  return onemapHandler(req, res);
 });
 
 async function startServer() {

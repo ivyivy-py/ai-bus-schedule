@@ -56,6 +56,9 @@ export default async function handler(req, res) {
   ).trim();
   const hasLtaKey = ltaApiKey.length > 0;
 
+  const oneMapApiKey = (process.env.ONE_MAP_API_KEY || '').trim();
+  const hasOneMapKey = oneMapApiKey.length > 0;
+
   const results = {
     ltaBusArrival: {
       name: 'LTA DataMall Bus Arrival v3',
@@ -79,6 +82,15 @@ export default async function handler(req, res) {
       name: 'Data.gov.sg 2-Hour Weather Forecast',
       endpoint: 'https://api-open.data.gov.sg/v2/real-time/api/two-hr-forecast',
       configuredKey: true, // Public API, no key required
+      status: 'unknown',
+      operational: false,
+      latencyMs: 0,
+      details: '',
+    },
+    oneMap: {
+      name: 'Singapore OneMap Base Map (SLA)',
+      endpoint: 'https://www.onemap.gov.sg/maps/json/raster/tilejson/2.2.0/Default.json',
+      configuredKey: hasOneMapKey,
       status: 'unknown',
       operational: false,
       latencyMs: 0,
@@ -195,6 +207,31 @@ export default async function handler(req, res) {
     results.weatherGovSg.details = `Exception: ${err.message}. Weather ticker fallback active.`;
   }
 
+  // 4. Check Singapore OneMap Base Map (SLA TileJSON)
+  try {
+    const check = await fetchWithTimeout(
+      'https://www.onemap.gov.sg/maps/json/raster/tilejson/2.2.0/Default.json',
+      { headers: { accept: 'application/json' } },
+      5000
+    );
+
+    results.oneMap.latencyMs = check.latencyMs;
+
+    if (check.ok) {
+      results.oneMap.status = 'ok';
+      results.oneMap.operational = true;
+      results.oneMap.details = 'OneMap TileJSON 2.2.0 endpoint active. Base map operational.';
+    } else {
+      results.oneMap.status = 'degraded';
+      results.oneMap.operational = false;
+      results.oneMap.details = check.error || `HTTP ${check.status} from OneMap. Fallback raster basemap active.`;
+    }
+  } catch (err) {
+    results.oneMap.status = 'degraded';
+    results.oneMap.operational = false;
+    results.oneMap.details = `Exception: ${err.message}. Fallback basemap active.`;
+  }
+
   // Overall system evaluation
   const allOperational = Object.values(results).every((api) => api.operational);
   const overallStatus = allOperational ? 'healthy' : 'degraded';
@@ -206,12 +243,15 @@ export default async function handler(req, res) {
     service: 'Singapore Bus & Weather Ticker API',
     hasLtaApiKey: hasLtaKey,
     ltaKeyMasked: hasLtaKey ? `${ltaApiKey.slice(0, 4)}...${ltaApiKey.slice(-4)}` : null,
+    hasOneMapKey: hasOneMapKey,
     apis: results,
     endpoints: {
       health: '/api/health.js',
       busArrival: '/api/bus-arrival?BusStopCode=01012',
       busRoute: '/api/bus-route?ServiceNo=10',
       weather: '/api/weather?lat=1.3521&lon=103.8198',
+      oneMap: '/api/onemap',
+      oneMapSample: '/api/onemap.html',
     },
     system: {
       nodeVersion: process.version,
