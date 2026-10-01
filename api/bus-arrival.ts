@@ -30,7 +30,10 @@ export default async function handler(req: any, res: any) {
     return res.status(400).json({ error: 'BusStopCode query parameter is required' });
   }
 
-  const ltaApiKey = process.env.LTA_API_KEY || process.env.DATAMALL_API_KEY;
+  const ltaApiKey =
+    process.env.LTA_ACCOUNT_KEY ||
+    process.env.LTA_API_KEY ||
+    process.env.DATAMALL_API_KEY;
 
   if (ltaApiKey && ltaApiKey.trim() !== '') {
     try {
@@ -134,7 +137,7 @@ export default async function handler(req: any, res: any) {
     busStopCode,
     services: simulated,
     isSimulated: true,
-    message: 'Simulated data. Set LTA_API_KEY environment variable in Vercel for live Singapore LTA DataMall feed.',
+    message: 'Simulated data. Set LTA_ACCOUNT_KEY environment variable in Vercel for live Singapore LTA DataMall feed.',
     timestamp: new Date().toISOString(),
   });
 }

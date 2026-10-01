@@ -26,7 +26,10 @@ export default async function handler(req: any, res: any) {
   }
 
   // 1. Try LTA DataMall API if AccountKey is provided
-  const apiKey = process.env.LTA_API_KEY || process.env.DATAMALL_API_KEY;
+  const apiKey =
+    process.env.LTA_ACCOUNT_KEY ||
+    process.env.LTA_API_KEY ||
+    process.env.DATAMALL_API_KEY;
   if (apiKey && apiKey.trim() !== '') {
     try {
       const url = `https://datamall2.mytransport.sg/ltaodataservice/BusRoutes?$filter=ServiceNo eq '${encodeURIComponent(serviceNo)}'`;

@@ -72,7 +72,7 @@ export function generateSimulatedArrivals(busStopCode: string, serviceNo?: strin
     roadName: stop.roadName,
     services,
     isSimulated: true,
-    message: 'Displaying simulated timings (configure LTA_API_KEY in Vercel for live LTA data)',
+    message: 'Displaying simulated timings (configure LTA_ACCOUNT_KEY in Vercel for live LTA data)',
     timestamp: new Date().toISOString(),
   };
 }

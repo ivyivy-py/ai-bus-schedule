@@ -48,7 +48,12 @@ export default async function handler(req, res) {
 
   const query = req.query || {};
   const isDetailed = query.detailed !== 'false'; // detailed by default
-  const ltaApiKey = (process.env.LTA_API_KEY || process.env.DATAMALL_API_KEY || '').trim();
+  const ltaApiKey = (
+    process.env.LTA_ACCOUNT_KEY ||
+    process.env.LTA_API_KEY ||
+    process.env.DATAMALL_API_KEY ||
+    ''
+  ).trim();
   const hasLtaKey = ltaApiKey.length > 0;
 
   const results = {
@@ -107,7 +112,7 @@ export default async function handler(req, res) {
       } else if (check.status === 401 || check.status === 403) {
         results.ltaBusArrival.status = 'unauthorized';
         results.ltaBusArrival.operational = false;
-        results.ltaBusArrival.details = `LTA returned HTTP ${check.status}. Check if LTA_API_KEY is valid. App will fallback to simulated arrival timings.`;
+        results.ltaBusArrival.details = `LTA returned HTTP ${check.status}. Check if LTA_ACCOUNT_KEY is valid. App will fallback to simulated arrival timings.`;
       } else {
         results.ltaBusArrival.status = 'error';
         results.ltaBusArrival.operational = false;
@@ -121,7 +126,7 @@ export default async function handler(req, res) {
   } else {
     results.ltaBusArrival.status = 'simulated';
     results.ltaBusArrival.operational = true;
-    results.ltaBusArrival.details = 'No LTA_API_KEY environment variable provided. Realistic simulated bus arrivals are active and working.';
+    results.ltaBusArrival.details = 'No LTA_ACCOUNT_KEY environment variable provided. Realistic simulated bus arrivals are active and working.';
   }
 
   // 2. Check LTA Bus Routes API

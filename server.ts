@@ -41,7 +41,10 @@ app.get('/api/bus-arrival', async (req, res) => {
     return res.status(400).json({ error: 'BusStopCode query parameter is required' });
   }
 
-  const ltaApiKey = process.env.LTA_API_KEY || process.env.DATAMALL_API_KEY;
+  const ltaApiKey =
+    process.env.LTA_ACCOUNT_KEY ||
+    process.env.LTA_API_KEY ||
+    process.env.DATAMALL_API_KEY;
 
   if (ltaApiKey && ltaApiKey.trim() !== '') {
     try {
@@ -163,7 +166,7 @@ app.get('/api/bus-arrival', async (req, res) => {
     roadName: stop.roadName,
     services: simulatedServices,
     isSimulated: true,
-    message: 'Displaying simulated timings (configure LTA_API_KEY for live LTA DataMall feed)',
+    message: 'Displaying simulated timings (configure LTA_ACCOUNT_KEY in Vercel for live LTA DataMall feed)',
     timestamp: new Date().toISOString(),
   });
 });
@@ -255,8 +258,11 @@ app.get('/api/bus-route', async (req, res) => {
     return res.status(400).json({ error: 'ServiceNo parameter is required' });
   }
 
-  // 1. Try querying LTA DataMall if LTA_API_KEY is configured
-  const apiKey = process.env.LTA_API_KEY || process.env.DATAMALL_API_KEY;
+  // 1. Try querying LTA DataMall if LTA_ACCOUNT_KEY or LTA_API_KEY is configured
+  const apiKey =
+    process.env.LTA_ACCOUNT_KEY ||
+    process.env.LTA_API_KEY ||
+    process.env.DATAMALL_API_KEY;
   if (apiKey) {
     try {
       const url = `https://datamall2.mytransport.sg/ltaodataservice/BusRoutes?$filter=ServiceNo eq '${encodeURIComponent(serviceNo)}'`;

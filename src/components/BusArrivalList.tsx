@@ -159,7 +159,7 @@ export const BusArrivalList: React.FC<BusArrivalListProps> = ({
           <div className="leading-relaxed">
             <span className="font-semibold text-amber-300">Live Simulation Mode:</span> Set your free{' '}
             <code className="px-1.5 py-0.5 bg-amber-500/20 rounded font-mono text-[11px] text-amber-100">
-              LTA_API_KEY
+              LTA_ACCOUNT_KEY
             </code>{' '}
             in Vercel or your local environment for live Singapore DataMall arrivals.
           </div>
