@@ -9,6 +9,7 @@ import {
   searchBusServices,
 } from './src/data/singaporeBusStops';
 import { SERVICE_10_DIR1, SERVICE_10_DIR2 } from './src/data/ltaBusRoutesData';
+import healthHandler from './api/health.js';
 
 dotenv.config();
 
@@ -323,14 +324,9 @@ app.get('/api/bus-route', async (req, res) => {
   return res.status(404).json({ error: `Route for service ${serviceNo} not found` });
 });
 
-// Health endpoint
-app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    service: 'Singapore Bus & Weather Ticker API',
-    hasLtaKey: Boolean(process.env.LTA_API_KEY || process.env.DATAMALL_API_KEY),
-    time: new Date().toISOString(),
-  });
+// Health and API monitoring endpoint
+app.all(['/api/health', '/api/health.js'], (req, res) => {
+  return healthHandler(req, res);
 });
 
 async function startServer() {
