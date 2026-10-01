@@ -45,30 +45,35 @@ export const BusStopMap: React.FC<BusStopMapProps> = ({
     const initialLat = selectedStop?.latitude || userLocation?.latitude || 1.3521;
     const initialLng = selectedStop?.longitude || userLocation?.longitude || 103.8198;
 
+    // Singapore OneMap bounds
+    const sw = L.latLng(1.144, 103.535);
+    const ne = L.latLng(1.494, 104.502);
+    const bounds = L.latLngBounds(sw, ne);
+
     const map = L.map(mapContainerRef.current, {
       center: [initialLat, initialLng],
       zoom: 14,
       zoomControl: false,
-      maxBounds: [
-        [1.15, 103.55],
-        [1.5, 104.1],
-      ],
+      maxBounds: bounds,
       minZoom: 11,
+      maxZoom: 19,
     });
 
-    // Set OneMap attribution prefix (Singapore Land Authority compliance)
+    /** DO NOT REMOVE the OneMap attribution below **/
     if (map.attributionControl) {
       map.attributionControl.setPrefix(
-        '<img src="https://www.onemap.gov.sg/web-assets/images/logo/om_logo.png" style="height:16px;width:16px;display:inline-block;vertical-align:middle;margin-right:4px;"/>&nbsp;<a href="https://www.onemap.gov.sg/" target="_blank" rel="noopener noreferrer">OneMap</a>&nbsp;&copy;&nbsp;contributors&nbsp;&#124;&nbsp;<a href="https://www.sla.gov.sg/" target="_blank" rel="noopener noreferrer">Singapore Land Authority</a>'
+        '<img src="https://www.onemap.gov.sg/web-assets/images/logo/om_logo.png" style="height:18px;width:18px;display:inline-block;vertical-align:middle;margin-right:4px;"/>&nbsp;<a href="https://www.onemap.gov.sg/" target="_blank" rel="noopener noreferrer">OneMap</a>&nbsp;&copy;&nbsp;contributors&nbsp;&#124;&nbsp;<a href="https://www.sla.gov.sg/" target="_blank" rel="noopener noreferrer">Singapore Land Authority</a>'
       );
     }
 
-    // High quality modern cartography tile layer
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-      attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/">CARTO</a>',
+    // Singapore OneMap Official Base Map Layer (Singapore Land Authority)
+    L.tileLayer('https://www.onemap.gov.sg/maps/tiles/Default/{z}/{x}/{y}.png', {
       maxZoom: 19,
-      subdomains: 'abcd',
+      minZoom: 11,
+      bounds: bounds,
+      detectRetina: true,
+      attribution:
+        '<img src="https://www.onemap.gov.sg/web-assets/images/logo/om_logo.png" style="height:16px;width:16px;display:inline-block;vertical-align:middle;margin-right:4px;"/>&nbsp;<a href="https://www.onemap.gov.sg/" target="_blank" rel="noopener noreferrer">OneMap</a>&nbsp;&copy;&nbsp;contributors&nbsp;&#124;&nbsp;<a href="https://www.sla.gov.sg/" target="_blank" rel="noopener noreferrer">Singapore Land Authority</a>',
     }).addTo(map);
 
     // Zoom controls in top right
